@@ -4,74 +4,114 @@ from datetime import datetime
 import pytz
 
 # ---------------------------
-# 設定エリア
+# 1. ページ設定 & 余計な表示を消すCSS
 # ---------------------------
-st.set_page_config(page_title="Co-Write Sprinter", page_icon="🦁")
+st.set_page_config(page_title="Co-Write Sprinter", page_icon="🦁", layout="centered")
 
-# 締め切り設定 (2026年1月14日 23:59 JST)
+# 右上のメニューや下のフッターを隠す魔法のCSS
+hide_streamlit_style = """
+            <style>
+            #MainMenu {visibility: hidden;}
+            footer {visibility: hidden;}
+            header {visibility: hidden;}
+            /* デッドラインの文字サイズ調整 */
+            .big-font {
+                font-size:20px !important;
+                font-weight: bold;
+                color: #FF4B4B;
+            }
+            </style>
+            """
+st.markdown(hide_streamlit_style, unsafe_allow_html=True)
+
+# ---------------------------
+# 2. ロジック（時間計算）
+# ---------------------------
 DEADLINE = datetime(2026, 1, 14, 23, 59, 0, tzinfo=pytz.timezone('Asia/Tokyo'))
-
-# ---------------------------
-# サイドバー：カウントダウン
-# ---------------------------
-st.sidebar.header("🦁 Co-Write Sprinter")
-st.sidebar.markdown("---")
-
 now = datetime.now(pytz.timezone('Asia/Tokyo'))
 diff = DEADLINE - now
 
+# ---------------------------
+# 3. メイン画面：デッドライン表示（最優先！）
+# ---------------------------
+# スマホで一番最初に見るべき情報はこれ！
 if diff.total_seconds() > 0:
     days = diff.days
     hours = diff.seconds // 3600
     minutes = (diff.seconds % 3600) // 60
     
-    st.sidebar.metric(label="🔥 DEADLINEまで", value=f"あと {days}日 {hours}時間 {minutes}分")
-    st.sidebar.progress(max(0, min(100, int((1 - diff.total_seconds() / (7*24*60*60)) * 100))))
+    # 視覚的にわかりやすくバーで表示
+    progress_val = max(0, min(100, int((1 - diff.total_seconds() / (7*24*60*60)) * 100)))
+    
+    # 文字で表示（カスタムHTMLでサイズ制御）
+    st.markdown(f'<p class="big-font">🔥 DEADLINEまで：あと {hours}時間 {minutes}分</p>', unsafe_allow_html=True)
+    st.progress(progress_val)
 else:
-    st.sidebar.error("🚨 締め切り過ぎてます！！")
+    st.error("🚨 締め切り過ぎてます！！提出急げ！！")
+
+st.write("---") # 区切り線
 
 # ---------------------------
-# メイン画面：タスク管理
+# 4. タスク管理ボード
 # ---------------------------
-st.title("🚀 制作進行ボード")
+st.subheader("🚀 制作進行ボード") # タイトルサイズを少し小さく
 
 # タブを作る
-tab1, tab2, tab3 = st.tabs(["1. Pose & Gimmick", "2. 絶対的マスターピース！", "3. GO! GO! RUNNER!"])
+tab1, tab2, tab3 = st.tabs(["1. Pose", "2. Masterpiece", "3. Runner"])
 
-def task_list(song_name):
-    st.header(f"🎵 {song_name}")
-    
-    # 仮のデータ（本来はここをスプレッドシートと繋ぎます）
-    tasks = {
-        "ヘッドアレンジ作成": True,
-        "ギター録音": True,
-        "梅澤アレンジ待ち": False,
-        "ボーカルRec": False,
-        "ミックス確認": False
-    }
+def task_list(song_name, task_data):
+    st.markdown(f"**🎵 {song_name}**") # 曲タイトルも少し小さく太字で
     
     # 完了数カウント
     done_count = 0
+    total_tasks = len(task_data)
     
-    for task, is_done in tasks.items():
-        # チェックボックスを表示
-        checked = st.checkbox(task, value=is_done, key=f"{song_name}_{task}")
+    for task_name, info in task_data.items():
+        # 担当者アイコン
+        person_icon = "🦁" if info["person"] == "miyoshi" else "👤"
+        label = f"{person_icon} {task_name}"
+        
+        # チェックボックス
+        checked = st.checkbox(label, value=info["done"], key=f"{song_name}_{task_name}")
         if checked:
             done_count += 1
             
-    # 進捗バー
-    progress = done_count / len(tasks)
-    st.caption(f"進捗率: {int(progress * 100)}%")
-    st.progress(progress)
+    # 進捗率
+    if total_tasks > 0:
+        progress = done_count / total_tasks
+        st.caption(f"進捗: {int(progress * 100)}%")
+        st.progress(progress)
+
+# --- 曲ごとのデータ（ここを書き換えればタスクが変わります） ---
+
+# 1曲目
+tasks_1 = {
+    "ギター本番録音": {"person": "miyoshi", "done": True},
+    "サビ構成変更": {"person": "umezawa", "done": True},
+    "ミックス最終確認": {"person": "umezawa", "done": False}
+}
+
+# 2曲目
+tasks_2 = {
+    "歌データ送信": {"person": "miyoshi", "done": True},
+    "ブラス追加・Mix": {"person": "umezawa", "done": False},
+}
+
+# 3曲目
+tasks_3 = {
+    "アレンジ提出": {"person": "umezawa", "done": False},
+    "ボーカルRec": {"person": "miyoshi", "done": False},
+    "BPM/Key固定確認": {"person": "miyoshi", "done": True},
+}
 
 with tab1:
-    task_list("Pose & Gimmick")
+    task_list("Pose & Gimmick", tasks_1)
 
 with tab2:
-    task_list("絶対的マスターピース！")
+    task_list("絶対的マスターピース！", tasks_2)
 
 with tab3:
-    task_list("GO! GO! RUNNER!")
+    task_list("GO! GO! RUNNER!", tasks_3)
 
 st.markdown("---")
-st.caption("Developed by miyoshi & Gemini")
+st.caption("Auto-generated by Gemini")
