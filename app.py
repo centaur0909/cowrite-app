@@ -26,12 +26,18 @@ hide_streamlit_style = """
 st.markdown(hide_streamlit_style, unsafe_allow_html=True)
 
 # ---------------------------
-# 2. スプレッドシート接続機能（心臓部）
+# 2. スプレッドシート接続機能（ここを修正しました！）
 # ---------------------------
 @st.cache_resource
 def init_connection():
     key_dict = json.loads(st.secrets["gcp_service_account"]["info"])
-    scopes = ["https://www.googleapis.com/auth/spreadsheets"]
+    
+    # 【修正】スプレッドシートだけでなく、ドライブの権限も追加
+    scopes = [
+        "https://www.googleapis.com/auth/spreadsheets",
+        "https://www.googleapis.com/auth/drive"
+    ]
+    
     creds = Credentials.from_service_account_info(key_dict, scopes=scopes)
     client = gspread.authorize(creds)
     return client.open("CoWrite_DB").sheet1
@@ -101,7 +107,6 @@ try:
                     is_done = str(row["完了"]).upper() == "TRUE"
                     label = f"【{row['担当']}】 {row['タスク名']}"
                     
-                    # チェックボックス（状態が変わったら更新）
                     new_status = st.checkbox(label, value=is_done, key=f"task_{index}")
                     
                     if new_status != is_done:
@@ -113,5 +118,4 @@ try:
 
 except Exception as e:
     st.error("⚠️ エラーが発生しました！")
-    st.warning("スプレッドシートの名前や見出しを確認してください")
     st.code(e)
