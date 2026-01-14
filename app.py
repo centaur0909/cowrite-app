@@ -103,7 +103,7 @@ st.markdown(f"""
     /* チェックボックス周りの調整 */
     div[data-testid="stCheckbox"] {{
         min-height: auto;
-        margin-bottom: 0px; /* 行間さらに詰める */
+        margin-bottom: 0px; 
         padding-top: 0px;
         padding-bottom: 0px;
     }}
@@ -121,20 +121,20 @@ st.markdown(f"""
         min-width: auto !important;
     }}
     
-    /* 曲ごとのヘッダーデザイン（間延び防止） */
+    /* 曲ごとのヘッダー */
     .song-header {{
         font-size: 1.1rem;
         font-weight: 700;
         color: #E0E0E0;
         margin-top: 10px;
-        margin-bottom: 2px; /* 下の余白を極限まで減らす */
+        margin-bottom: 2px;
     }}
     .custom-hr {{
         border: 0;
         height: 1px;
         background: #333;
         margin-top: 0px;
-        margin-bottom: 10px; /* 線の下の余白 */
+        margin-bottom: 10px;
     }}
 
     /* 不要な要素を隠す */
@@ -212,7 +212,7 @@ if not df.empty and "完了" in df.columns:
     </div>
     """, unsafe_allow_html=True)
 
-# --- タスクリスト（V12.2） ---
+# --- タスクリスト（V12.3 改行対策版） ---
 if not df.empty and "曲名" in df.columns:
     formal_song_names = df["曲名"].unique()
     
@@ -222,7 +222,7 @@ if not df.empty and "曲名" in df.columns:
         
         for i, formal_name in enumerate(formal_song_names):
             with tabs[i]:
-                # 間延び対策：HTMLで直接書いてマージン制御
+                # 間延び対策
                 st.markdown(f'<div class="song-header">🎵 {formal_name}</div><hr class="custom-hr">', unsafe_allow_html=True)
                 
                 song_tasks = df[df["曲名"] == formal_name]
@@ -236,9 +236,10 @@ if not df.empty and "曲名" in df.columns:
                     # 1. 期限 (未完了)
                     deadline_str = ""
                     if not is_done and "期限" in row and str(row["期限"]).strip() != "":
-                        # span style='white-space: nowrap' で折り返し禁止！
-                        # これで画面幅が足りない時は「日付ごと」改行されます
-                        deadline_str = f" <span style='white-space: nowrap; font-size: 0.9em;'>:red[(📅 {row['期限']})]</span>"
+                        # 日付文字列内のスペースを「改行禁止スペース(\u00A0)」に置換
+                        safe_date = str(row['期限']).replace(" ", "\u00A0")
+                        # CSSを使わず、Markdownの色指定のみ使用
+                        deadline_str = f" :red[(📅\u00A0{safe_date})]"
                     
                     # 2. 完了日時 (完了)
                     done_str = ""
@@ -246,9 +247,10 @@ if not df.empty and "曲名" in df.columns:
                         try:
                             d = datetime.strptime(str(row["完了日時"]), '%Y-%m-%d %H:%M:%S')
                             short_date = d.strftime('%m/%d %H:%M')
-                            done_str = f" <span style='white-space: nowrap; font-size: 0.9em;'>:green[(✔ {short_date})]</span>"
+                            safe_done = short_date.replace(" ", "\u00A0")
+                            done_str = f" :green[(✔\u00A0{safe_done})]"
                         except:
-                            done_str = " <span style='white-space: nowrap; font-size: 0.9em;'>:green[(✔ DONE)]</span>"
+                            done_str = " :green[(✔\u00A0DONE)]"
                     
                     if is_done:
                         label = f"~~{person} {task_text}~~{done_str}"
