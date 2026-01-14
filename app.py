@@ -5,7 +5,7 @@ import pytz
 import gspread
 from google.oauth2.service_account import Credentials
 import json
-import time # 時間管理用
+import time
 
 # ==========================================
 # 🛠 管理者設定エリア
@@ -22,77 +22,70 @@ SONG_LIST = [
 st.set_page_config(page_title=PROJECT_TITLE, page_icon="🔥", layout="centered")
 
 # ---------------------------
-# 🎨 CSS: 横スクロール禁止 & スマホ最適化
+# 🎨 CSS: スマホ最適化（余白削除・横スクロール防止）
 # ---------------------------
 hide_streamlit_style = """
 <style>
+    /* 不要なヘッダー・フッター削除 */
     #MainMenu {visibility: hidden;}
     footer {visibility: hidden;}
     header {visibility: hidden;}
     
-    /* 横スクロールを親要素から抹殺する */
-    body {
-        overflow-x: hidden !important;
-    }
-    .stApp {
-        overflow-x: hidden !important;
-    }
-    
-    /* スマホの余白を限界まで削る */
+    /* 1. 全体の余白をスマホ用に最小化 */
     .block-container {
         padding-top: 1rem !important;
         padding-left: 0.5rem !important;
         padding-right: 0.5rem !important;
-        max-width: 100% !important;
+        padding-bottom: 3rem !important;
     }
 
-    /* タイトル */
+    /* 2. カラム間の余白を削除（これが横スクロールの元凶） */
+    [data-testid="column"] {
+        padding: 0 !important;
+    }
+    [data-testid="stHorizontalBlock"] {
+        gap: 0.5rem !important;
+    }
+
+    /* 3. タイトルとデッドライン */
     .custom-title {
         font-size: 20px !important;
         font-weight: 700;
-        margin-bottom: 2px;
+        margin-bottom: 0px;
         white-space: nowrap;
         overflow: hidden;
         text-overflow: ellipsis;
     }
-
-    /* デッドライン */
     .deadline-info {
         font-size: 14px;
         color: #FF4B4B;
         font-weight: bold;
     }
 
-    /* スマホレイアウト強制（折り返し禁止） */
-    [data-testid="stHorizontalBlock"] {
-        flex-wrap: nowrap !important;
+    /* 4. 入力フォームの微調整 */
+    .stTextInput input {
+        font-size: 16px !important;
+    }
+    
+    /* 5. ボタン（ゴミ箱）のサイズ強制 */
+    div[data-testid="column"]:nth-of-type(2) button {
+        border: 1px solid #ddd !important;
+        background-color: #f0f2f6 !important;
+        color: #333 !important;
+        height: 2.5rem !important;
         width: 100% !important;
-    }
-    
-    /* 左カラム（テキスト）：縮小許可 */
-    [data-testid="column"]:nth-of-type(1) {
-        flex: 1 1 auto !important;
-        width: auto !important;
-        min-width: 0 !important;
-        overflow: hidden !important;
-    }
-    
-    /* 右カラム（ゴミ箱）：サイズ固定 */
-    [data-testid="column"]:nth-of-type(2) {
-        flex: 0 0 35px !important;
-        width: 35px !important;
-        min-width: 35px !important;
+        padding: 0 !important;
+        margin-top: 3px !important; /* チェックボックスと高さを合わせる */
     }
 
-    /* ボタン微調整 */
-    .stButton button {
-        padding: 0px !important;
-        width: 30px !important;
-        height: 30px !important;
-        font-size: 12px !important;
-    }
+    /* チェックボックスの余白調整 */
     .stCheckbox {
-        margin-top: -4px;
+        margin-top: 0px !important;
+    }
+    
+    /* チェックボックスのラベル文字サイズ */
+    .stCheckbox label p {
+        font-size: 14px !important;
     }
 </style>
 """
@@ -135,13 +128,12 @@ if diff.total_seconds() > 0:
 else:
     st.error("🚨 締め切り過ぎてます！")
 
-# --- 自動更新モード（トグル） ---
-# ここをONにすると、スクリプトがループして最新情報を取ってくる
-auto_refresh = st.toggle("🔄 自動更新モード (閲覧用)")
+# 自動更新スイッチ
+auto_refresh = st.toggle("🔄 自動更新 (入力時はOFF)", value=False)
 
 if auto_refresh:
-    time.sleep(10) # 10秒待つ
-    st.rerun()     # 画面を更新！
+    time.sleep(10)
+    st.rerun()
 
 st.markdown("---") 
 
@@ -154,21 +146,26 @@ try:
         with tabs[i]:
             st.markdown(f"**🎵 {song_name}**")
             
-            # 入力フォーム
+            # --- 入力フォーム（安全確実な縦並び） ---
             with st.expander("➕ タスク追加", expanded=False):
                 with st.form(key=f"add_{i}", clear_on_submit=True):
-                    c1, c2 = st.columns([4, 1]) 
-                    with c1:
-                        new_task = st.text_input("タスク名", label_visibility="collapsed", placeholder="タスク名")
-                    with c2:
-                        submit = st.form_submit_button("追加")
+                    # 1. タスク名
+                    new_task = st.text_input("タスク名", placeholder="例：ギター録音")
+                    
+                    # 2. 担当者（カラムを使わず縦に積む＝絶対に崩れない）
+                    new_person = st.selectbox("担当", ["-", "三好", "梅澤", "二人"])
+                    
+                    # 3. 追加ボタン（全幅で押しやすく）
+                    submit = st.form_submit_button("リストに追加", use_container_width=True)
                     
                     if submit and new_task:
-                        sheet.append_row([song_name, new_task, "二人", "FALSE"])
-                        st.success("追加")
+                        person_val = new_person if new_person != "-" else ""
+                        sheet.append_row([song_name, new_task, person_val, "FALSE"])
+                        st.success("追加しました")
+                        time.sleep(0.5)
                         st.rerun()
 
-            # リスト表示
+            # --- リスト表示 ---
             if not df.empty and "曲名" in df.columns:
                 song_tasks = df[df["曲名"] == song_name]
                 
@@ -182,8 +179,9 @@ try:
                     person = f"【{row['担当']}】" if row['担当'] not in ["-", ""] else ""
                     label = f"{person}{row['タスク名']}"
                     
-                    # カラム作成（比率調整済み）
-                    col_task, col_del = st.columns([6, 1])
+                    # カラム比率：テキスト(8.5) : ゴミ箱(1.5)
+                    # gap="small" で余白を最小化
+                    col_task, col_del = st.columns([0.85, 0.15], gap="small")
                     
                     with col_task:
                         new_status = st.checkbox(label, value=is_done, key=f"t_{index}")
@@ -192,6 +190,7 @@ try:
                             st.rerun()
                     
                     with col_del:
+                        # アイコンのみ、ラベルなし
                         if st.button("🗑", key=f"d_{index}"):
                             sheet.delete_rows(index + 2)
                             st.rerun()
