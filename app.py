@@ -69,7 +69,7 @@ except Exception as e:
 st.set_page_config(page_title=PROJECT_TITLE, page_icon="🦁", layout="centered")
 
 # ==========================================
-# 🎨 CSS (HTMLタグを使わないレイアウト調整のみ)
+# 🎨 CSS
 # ==========================================
 st.markdown(f"""
 <style>
@@ -103,7 +103,7 @@ st.markdown(f"""
     /* チェックボックス周りの調整 */
     div[data-testid="stCheckbox"] {{
         min-height: auto;
-        margin-bottom: 0px; 
+        margin-bottom: -15px !important; /* タスクと日付の距離を縮める */
         padding-top: 0px;
         padding-bottom: 0px;
     }}
@@ -111,16 +111,9 @@ st.markdown(f"""
         font-size: 15px;
         line-height: 1.5;
         padding-top: 6px;
-        padding-bottom: 6px;
+        padding-bottom: 0px;
     }}
 
-    /* タブのデザイン */
-    button[data-baseweb="tab"] {{
-        font-size: 13px !important;
-        padding: 0px 10px !important;
-        min-width: auto !important;
-    }}
-    
     /* 曲ごとのヘッダーデザイン */
     .song-header {{
         font-size: 1.1rem;
@@ -136,9 +129,19 @@ st.markdown(f"""
         margin-top: 0px;
         margin-bottom: 5px;
     }}
+    
+    /* 日付情報のスタイル（2行目用） */
+    .task-meta {{
+        font-size: 11px !important; /* 確実に小さくする */
+        margin-left: 28px; /* チェックボックスのテキストに揃えるインデント */
+        margin-bottom: 8px;
+        color: #888;
+        line-height: 1.2;
+    }}
 
     /* 不要な要素を隠す */
     #MainMenu {{visibility: hidden;}} footer {{visibility: hidden;}} header {{visibility: hidden;}}
+    button[data-baseweb="tab"] {{ font-size: 13px !important; padding: 0px 10px !important; min-width: auto !important; }}
 </style>
 """, unsafe_allow_html=True)
 
@@ -212,7 +215,7 @@ if not df.empty and "完了" in df.columns:
     </div>
     """, unsafe_allow_html=True)
 
-# --- タスクリスト（V13.1 HTML排除・改行禁止スペース版） ---
+# --- タスクリスト（V14.0 2行表示版） ---
 if not df.empty and "曲名" in df.columns:
     formal_song_names = df["曲名"].unique()
     
@@ -222,7 +225,6 @@ if not df.empty and "曲名" in df.columns:
         
         for i, formal_name in enumerate(formal_song_names):
             with tabs[i]:
-                # 余白を狭めたタイトル表示
                 st.markdown(f'<div class="song-header">🎵 {formal_name}</div><hr class="custom-hr">', unsafe_allow_html=True)
                 
                 song_tasks = df[df["曲名"] == formal_name]
@@ -233,42 +235,32 @@ if not df.empty and "曲名" in df.columns:
                     person = f"【{row['担当']}】" if row['担当'] else ""
                     task_text = row['タスク名']
                     
-                    # ----------------------------------------------------
-                    # ここが修正ポイントです
-                    # HTMLタグは一切使いません。
-                    # 代わりに "\u00A0" (改行禁止スペース) を使って
-                    # 「日付が途中で切れない」ようにします。
-                    # ----------------------------------------------------
-                    
-                    # 1. 期限 (未完了)
-                    deadline_md = ""
-                    if not is_done and "期限" in row and str(row["期限"]).strip() != "":
-                        # 表示したい文字列内のスペースを全て「改行禁止スペース」に置換
-                        safe_date_str = f"(📅 {row['期限']})".replace(" ", "\u00A0")
-                        # Markdownの色指定 :red[...] を使用
-                        deadline_md = f" :red[{safe_date_str}]"
-                    
-                    # 2. 完了日時 (完了)
-                    done_md = ""
-                    if is_done and "完了日時" in row and str(row["完了日時"]).strip() != "":
-                        try:
-                            d = datetime.strptime(str(row["完了日時"]), '%Y-%m-%d %H:%M:%S')
-                            short_date = d.strftime('%m/%d %H:%M')
-                            # 同様に改行禁止スペースに置換
-                            safe_done_str = f"(✔ {short_date})".replace(" ", "\u00A0")
-                            done_md = f" :green[{safe_done_str}]"
-                        except:
-                            done_md = " :green[(✔\u00A0DONE)]"
-                    
-                    # ラベル生成 (Markdownのみ)
+                    # 1行目：タスク名だけ（シンプルに）
                     if is_done:
-                        # 完了時
-                        label = f"~~{person} {task_text}~~{done_md}"
+                        label = f"~~{person} {task_text}~~"
                     else:
-                        # 未完了時
-                        label = f"**{person} {task_text}**{deadline_md}"
+                        label = f"**{person} {task_text}**"
                     
                     new_status = st.checkbox(label, value=is_done, key=f"t_{index}")
+
+                    # 2行目：日付情報（HTMLで独立させて表示）
+                    # ここなら文字サイズも絵文字サイズも自由自在です
+                    meta_html = ""
+                    if is_done and "完了日時" in row and str(row["完了日時"]).strip() != "":
+                         try:
+                            d = datetime.strptime(str(row["完了日時"]), '%Y-%m-%d %H:%M:%S')
+                            short_date = d.strftime('%m/%d %H:%M')
+                            # 緑色、小さめ
+                            meta_html = f'<div class="task-meta" style="color:#4CAF50;">✔ {short_date} DONE</div>'
+                         except:
+                            meta_html = '<div class="task-meta" style="color:#4CAF50;">✔ DONE</div>'
+                    elif not is_done and "期限" in row and str(row["期限"]).strip() != "":
+                         # 赤色、小さめ
+                         meta_html = f'<div class="task-meta" style="color:#FF4B4B;">📅 期限: {row["期限"]}</div>'
+                    
+                    # 日付がある場合のみ表示
+                    if meta_html:
+                        st.markdown(meta_html, unsafe_allow_html=True)
 
                     # --- 更新処理 ---
                     if new_status != is_done:
