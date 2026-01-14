@@ -11,7 +11,7 @@ import time
 # 🛠 管理者設定エリア
 # ==========================================
 PROJECT_TITLE = "🏆 リンプラリベンジ"  
-# JavaScriptに渡すために ISO形式 (YYYY-MM-DDTHH:MM:SS+09:00) で書くのが確実です
+# JavaScript用 (ISO 8601形式)
 DEADLINE_ISO = "2026-01-14T23:59:00+09:00"
 DEADLINE_DISPLAY = "2026-01-14 23:59"
 
@@ -21,14 +21,16 @@ SONG_MAP = {
     "絶対的マスターピース！": "絶マス", 
     "GO! GO! RUNNER!": "GGR"
 }
+
+# 担当者の選択肢（ここを「2人」に変更しました！）
+PERSON_OPTIONS = ["-", "三好", "梅澤", "2人"]
 # ==========================================
 
 st.set_page_config(page_title=PROJECT_TITLE, page_icon="🦁", layout="centered")
 
 # ---------------------------
-# 🎨 CSS & JavaScript (時計機能)
+# 🎨 CSS
 # ---------------------------
-# ここに「ヌルヌル動く時計」のプログラムを埋め込みます
 st.markdown(f"""
 <style>
     /* 基本設定 */
@@ -65,7 +67,7 @@ st.markdown(f"""
         font-weight: bold;
         font-size: 18px;
         border: 1px solid #ddd;
-        font-family: monospace; /* 数字がブレないように等幅フォント */
+        font-family: monospace;
     }}
     
     /* 6時間切った時の赤スタイル */
@@ -128,47 +130,6 @@ st.markdown(f"""
         padding-right: 10px !important;
     }}
 </style>
-
-<script>
-function updateTimer() {{
-    const deadline = new Date("{DEADLINE_ISO}");
-    const now = new Date();
-    const diff = deadline - now;
-
-    const box = document.getElementById("countdown-box");
-    
-    if (diff <= 0) {{
-        box.innerHTML = "🚨 DEADLINE PASSED 🚨";
-        box.className = "danger-mode";
-        return;
-    }}
-
-    const hours = Math.floor(diff / (1000 * 60 * 60));
-    const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
-    const seconds = Math.floor((diff % (1000 * 60)) / 1000);
-
-    // ゼロ埋め (09分 05秒 みたいにする)
-    const hStr = String(hours).padStart(2, '0');
-    const mStr = String(minutes).padStart(2, '0');
-    const sStr = String(seconds).padStart(2, '0');
-
-    // 表示更新
-    let emoji = "🔥";
-    if (hours < 6) {{
-        emoji = "😱";
-        box.classList.add("danger-mode");
-    }} else {{
-        box.classList.remove("danger-mode");
-    }}
-    
-    box.innerHTML = emoji + " 残り " + hStr + ":" + mStr + ":" + sStr;
-}}
-
-// 1秒ごとに実行
-setInterval(updateTimer, 1000);
-// 初回実行
-setTimeout(updateTimer, 100);
-</script>
 """, unsafe_allow_html=True)
 
 # ---------------------------
@@ -194,11 +155,57 @@ def load_data():
 # タイトル
 st.markdown(f'<div class="custom-title">{PROJECT_TITLE}</div>', unsafe_allow_html=True)
 
-# 時計表示エリア（中身はJavaScriptが書き換えます）
+# 時計表示エリア（ここにJavaScriptが時間を流し込みます）
 st.markdown('<div id="countdown-box">⌛ Loading Timer...</div>', unsafe_allow_html=True)
+
+# 日付表示
 st.markdown(f'<div class="deadline-date">📅 期限: {DEADLINE_DISPLAY}</div>', unsafe_allow_html=True)
 
-# データ自動更新スイッチ（時計とは無関係にデータをリロードするかどうか）
+# 🔥 修正点: タイマー用JavaScriptを「div」を作った後に読み込むように配置換え
+# これで「箱がない」エラーを防ぎます
+st.markdown(f"""
+<script>
+function updateTimer() {{
+    const deadline = new Date("{DEADLINE_ISO}");
+    const now = new Date();
+    const diff = deadline - now;
+    const box = document.getElementById("countdown-box");
+    
+    // まだ箱が生成されていない場合は何もしない（エラー防止）
+    if (!box) return;
+
+    if (diff <= 0) {{
+        box.innerHTML = "🚨 TIME UP 🚨";
+        box.className = "danger-mode";
+        return;
+    }}
+
+    const hours = Math.floor(diff / (1000 * 60 * 60));
+    const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+    const seconds = Math.floor((diff % (1000 * 60)) / 1000);
+
+    const hStr = String(hours).padStart(2, '0');
+    const mStr = String(minutes).padStart(2, '0');
+    const sStr = String(seconds).padStart(2, '0');
+
+    let emoji = "🔥";
+    if (hours < 6) {{
+        emoji = "😱";
+        box.classList.add("danger-mode");
+    }} else {{
+        box.classList.remove("danger-mode");
+    }}
+    
+    box.innerHTML = emoji + " 残り " + hStr + ":" + mStr + ":" + sStr;
+}}
+// 1秒ごとに実行
+setInterval(updateTimer, 1000);
+// 即時実行
+setTimeout(updateTimer, 500);
+</script>
+""", unsafe_allow_html=True)
+
+# データ自動更新スイッチ
 auto_refresh = st.toggle("🔄 データの自動取得 (30秒)", value=False)
 if auto_refresh:
     time.sleep(30)
@@ -247,7 +254,7 @@ try:
             if not df.empty and "曲名" in df.columns:
                 song_tasks = df[df["曲名"] == song_name]
                 
-                # 自動整列：未完了(FALSE)を上に、完了(TRUE)を下に
+                # 自動整列
                 song_tasks = song_tasks.sort_values(by="完了", ascending=True)
                 
                 for index, row in song_tasks.iterrows():
@@ -272,7 +279,7 @@ try:
                 with st.form(key=f"add_{i}", clear_on_submit=True):
                     new_task = st.text_input("タスク名")
                     
-                    PERSON_OPTIONS = ["-", "三好", "梅澤", "二人"]
+                    # 担当者の記憶ロジック
                     last_person_key = f"last_person_{i}"
                     default_index = 0
                     
@@ -281,6 +288,7 @@ try:
                         if last_p in PERSON_OPTIONS:
                             default_index = PERSON_OPTIONS.index(last_p)
 
+                    # ここで「2人」など変更後のリストを使います
                     new_person = st.selectbox("担当", PERSON_OPTIONS, index=default_index)
                     
                     if st.form_submit_button("追加", use_container_width=True):
