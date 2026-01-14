@@ -69,7 +69,7 @@ except Exception as e:
 st.set_page_config(page_title=PROJECT_TITLE, page_icon="🦁", layout="centered")
 
 # ==========================================
-# 🎨 CSS (余白・デザイン調整)
+# 🎨 CSS (HTMLタグを使わないレイアウト調整のみ)
 # ==========================================
 st.markdown(f"""
 <style>
@@ -121,12 +121,11 @@ st.markdown(f"""
         min-width: auto !important;
     }}
     
-    /* 曲ごとのヘッダーデザイン（余白を極限まで狭く） */
+    /* 曲ごとのヘッダーデザイン */
     .song-header {{
         font-size: 1.1rem;
         font-weight: 700;
         color: #E0E0E0;
-        /* 上下の余白を均等かつ狭く設定（以前の半分程度） */
         margin-top: 8px;    
         margin-bottom: 8px; 
     }}
@@ -213,7 +212,7 @@ if not df.empty and "完了" in df.columns:
     </div>
     """, unsafe_allow_html=True)
 
-# --- タスクリスト（V13.0） ---
+# --- タスクリスト（V13.1 HTML排除・改行禁止スペース版） ---
 if not df.empty and "曲名" in df.columns:
     formal_song_names = df["曲名"].unique()
     
@@ -234,37 +233,40 @@ if not df.empty and "曲名" in df.columns:
                     person = f"【{row['担当']}】" if row['担当'] else ""
                     task_text = row['タスク名']
                     
-                    # 共通スタイル定義（ここがキモです）
-                    # display: inline-block -> 「固まり」として扱う。入りきらなければブロックごと改行される。
-                    # white-space: nowrap -> ブロックの中では絶対に改行させない。
-                    # font-size: 0.8rem -> 絵文字も含めて文字を小さくする（これで絵文字デカすぎ問題を解決）
-                    # margin-left: 4px -> タスク名との間の隙間
-                    
-                    style_base = "display: inline-block; white-space: nowrap; font-size: 0.8rem; margin-left: 4px;"
+                    # ----------------------------------------------------
+                    # ここが修正ポイントです
+                    # HTMLタグは一切使いません。
+                    # 代わりに "\u00A0" (改行禁止スペース) を使って
+                    # 「日付が途中で切れない」ようにします。
+                    # ----------------------------------------------------
                     
                     # 1. 期限 (未完了)
-                    deadline_html = ""
+                    deadline_md = ""
                     if not is_done and "期限" in row and str(row["期限"]).strip() != "":
-                        # カラーコード直書き (#FF4B4B)
-                        deadline_html = f'<span style="{style_base} color: #FF4B4B;">(📅 {row["期限"]})</span>'
+                        # 表示したい文字列内のスペースを全て「改行禁止スペース」に置換
+                        safe_date_str = f"(📅 {row['期限']})".replace(" ", "\u00A0")
+                        # Markdownの色指定 :red[...] を使用
+                        deadline_md = f" :red[{safe_date_str}]"
                     
                     # 2. 完了日時 (完了)
-                    done_html = ""
+                    done_md = ""
                     if is_done and "完了日時" in row and str(row["完了日時"]).strip() != "":
                         try:
                             d = datetime.strptime(str(row["完了日時"]), '%Y-%m-%d %H:%M:%S')
                             short_date = d.strftime('%m/%d %H:%M')
-                            done_html = f'<span style="{style_base} color: #4CAF50;">(✔ {short_date})</span>'
+                            # 同様に改行禁止スペースに置換
+                            safe_done_str = f"(✔ {short_date})".replace(" ", "\u00A0")
+                            done_md = f" :green[{safe_done_str}]"
                         except:
-                            done_html = f'<span style="{style_base} color: #4CAF50;">(✔ DONE)</span>'
+                            done_md = " :green[(✔\u00A0DONE)]"
                     
-                    # ラベル生成 (HTMLを埋め込む)
+                    # ラベル生成 (Markdownのみ)
                     if is_done:
-                        # 完了時：タスク名は打ち消し線、日付は緑
-                        label = f"~~{person} {task_text}~~{done_html}"
+                        # 完了時
+                        label = f"~~{person} {task_text}~~{done_md}"
                     else:
-                        # 未完了時：タスク名は太字、日付は赤
-                        label = f"**{person} {task_text}**{deadline_html}"
+                        # 未完了時
+                        label = f"**{person} {task_text}**{deadline_md}"
                     
                     new_status = st.checkbox(label, value=is_done, key=f"t_{index}")
 
