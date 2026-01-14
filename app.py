@@ -56,7 +56,7 @@ hide_streamlit_style = """
         background-color: #f0f2f6;
         color: #000000 !important;
         text-align: center;
-        margin-bottom: 5px; /* 下のマージンを詰める */
+        margin-bottom: 5px; 
         font-weight: bold;
         font-size: 16px;
         border: 1px solid #ddd;
@@ -67,7 +67,7 @@ hide_streamlit_style = """
         border: 2px solid #d32f2f;
     }
     
-    /* 復活させた日付表示のデザイン */
+    /* 日付表示 */
     .deadline-date {
         text-align: center;
         font-size: 12px;
@@ -106,6 +106,13 @@ hide_streamlit_style = """
     
     /* チェックボックス */
     .stCheckbox { margin-bottom: 8px !important; }
+    
+    /* タブの文字サイズ調整（フルネームでも入りきるように少し小さく） */
+    button[data-baseweb="tab"] {
+        font-size: 14px !important;
+        padding-left: 10px !important;
+        padding-right: 10px !important;
+    }
 </style>
 """
 st.markdown(hide_streamlit_style, unsafe_allow_html=True)
@@ -151,7 +158,6 @@ if diff.total_seconds() > 0:
         f'<div class="{timer_class}">{emoji} 残り {hours}時間 {minutes}分</div>', 
         unsafe_allow_html=True
     )
-    # 【復活】日付表示
     st.markdown(f'<div class="deadline-date">📅 期限: {DEADLINE_STR}</div>', unsafe_allow_html=True)
 else:
     st.error("🚨 締め切り過ぎてます！提出急げ！")
@@ -195,7 +201,10 @@ try:
             st.balloons()
             st.success("🎉 全タスク完了！")
     
-    tabs = st.tabs([f"{s.split()[0]}" for s in SONG_LIST])
+    # 【ここを修正しました】
+    # 以前のコード: [f"{s.split()[0]}" for s in SONG_LIST] -> 勝手に短縮していた
+    # 今回のコード: SONG_LIST -> そのまま使う
+    tabs = st.tabs(SONG_LIST)
 
     for i, song_name in enumerate(SONG_LIST):
         with tabs[i]:
@@ -235,25 +244,20 @@ try:
                             time.sleep(0.5)
                             st.rerun()
 
-            # 削除エリア（改善版：チェックリスト方式）
-            # multiselectをやめて、チェックボックス一覧にする
+            # 削除エリア（チェックリスト方式）
             with st.expander("🗑️ タスク整理（削除）"):
                 if not df.empty and "曲名" in df.columns and len(song_tasks) > 0:
                     st.caption("削除したいタスクにチェックを入れてください")
                     
-                    # 削除用のフォーム
                     with st.form(key=f"del_form_{i}"):
                         rows_to_delete = []
-                        # 削除対象を選ぶチェックボックスを並べる
                         for idx, row in song_tasks.iterrows():
                             # 分かりやすくタスク名を表示
                             if st.checkbox(f"{row['タスク名']}", key=f"del_chk_{idx}"):
                                 rows_to_delete.append(idx + 2)
                         
-                        # 削除ボタン
                         if st.form_submit_button("チェックしたタスクを削除", type="primary", use_container_width=True):
                             if rows_to_delete:
-                                # 下から順に消さないと行がズレるのでソートして逆順に
                                 rows_to_delete.sort(reverse=True)
                                 for r in rows_to_delete:
                                     sheet.delete_rows(r)
