@@ -22,8 +22,6 @@ def init_connection():
 
 def load_data():
     wb = init_connection()
-    
-    # 1. Config（設定）
     try:
         config_sheet = wb.worksheet("Config")
         config_records = config_sheet.get_all_records()
@@ -31,7 +29,6 @@ def load_data():
     except:
         config = {"ProjectTitle": "Project", "Deadline": "2026-01-01 00:00"}
 
-    # 2. Songs（曲名マッピング）
     song_map = {}
     try:
         songs_sheet = wb.worksheet("Songs")
@@ -42,7 +39,6 @@ def load_data():
     except:
         pass
 
-    # 3. Main（タスク）
     main_sheet = wb.sheet1
     main_data = main_sheet.get_all_records()
     
@@ -80,7 +76,7 @@ st.markdown(f"""
     /* 全体背景 */
     .stApp {{ background-color: #0E1117; }}
     
-    /* コンテナ幅調整（スマホで見やすく） */
+    /* コンテナ幅調整 */
     .block-container {{ 
         padding-top: 2rem !important; 
         padding-bottom: 5rem !important; 
@@ -107,11 +103,15 @@ st.markdown(f"""
     /* チェックボックス周りの調整 */
     div[data-testid="stCheckbox"] {{
         min-height: auto;
-        margin-bottom: 4px; /* 行間 */
+        margin-bottom: 0px; /* 行間さらに詰める */
+        padding-top: 0px;
+        padding-bottom: 0px;
     }}
     div[data-testid="stCheckbox"] label {{
         font-size: 15px;
-        line-height: 1.5; /* スマホでの折り返しを見やすく */
+        line-height: 1.4; 
+        padding-top: 8px;
+        padding-bottom: 8px;
     }}
 
     /* タブのデザイン */
@@ -121,6 +121,22 @@ st.markdown(f"""
         min-width: auto !important;
     }}
     
+    /* 曲ごとのヘッダーデザイン（間延び防止） */
+    .song-header {{
+        font-size: 1.1rem;
+        font-weight: 700;
+        color: #E0E0E0;
+        margin-top: 10px;
+        margin-bottom: 2px; /* 下の余白を極限まで減らす */
+    }}
+    .custom-hr {{
+        border: 0;
+        height: 1px;
+        background: #333;
+        margin-top: 0px;
+        margin-bottom: 10px; /* 線の下の余白 */
+    }}
+
     /* 不要な要素を隠す */
     #MainMenu {{visibility: hidden;}} footer {{visibility: hidden;}} header {{visibility: hidden;}}
 </style>
@@ -196,7 +212,7 @@ if not df.empty and "完了" in df.columns:
     </div>
     """, unsafe_allow_html=True)
 
-# --- タスクリスト（修正版） ---
+# --- タスクリスト（V12.2） ---
 if not df.empty and "曲名" in df.columns:
     formal_song_names = df["曲名"].unique()
     
@@ -206,8 +222,8 @@ if not df.empty and "曲名" in df.columns:
         
         for i, formal_name in enumerate(formal_song_names):
             with tabs[i]:
-                st.markdown(f"##### 🎵 {formal_name}")
-                st.write("---") 
+                # 間延び対策：HTMLで直接書いてマージン制御
+                st.markdown(f'<div class="song-header">🎵 {formal_name}</div><hr class="custom-hr">', unsafe_allow_html=True)
                 
                 song_tasks = df[df["曲名"] == formal_name]
                 song_tasks = song_tasks.sort_values(by="完了", ascending=True)
@@ -217,32 +233,26 @@ if not df.empty and "曲名" in df.columns:
                     person = f"【{row['担当']}】" if row['担当'] else ""
                     task_text = row['タスク名']
                     
-                    # --- ここを修正しました ---
-                    # HTMLタグを使わず、Streamlitのカラー記法 :color[text] を使用
-                    
-                    # 1. 期限 (未完了の場合)
+                    # 1. 期限 (未完了)
                     deadline_str = ""
                     if not is_done and "期限" in row and str(row["期限"]).strip() != "":
-                        # :red[...] で赤文字にする
-                        deadline_str = f" :red[(📅 {row['期限']})]"
+                        # span style='white-space: nowrap' で折り返し禁止！
+                        # これで画面幅が足りない時は「日付ごと」改行されます
+                        deadline_str = f" <span style='white-space: nowrap; font-size: 0.9em;'>:red[(📅 {row['期限']})]</span>"
                     
-                    # 2. 完了日時 (完了の場合)
+                    # 2. 完了日時 (完了)
                     done_str = ""
                     if is_done and "完了日時" in row and str(row["完了日時"]).strip() != "":
                         try:
                             d = datetime.strptime(str(row["完了日時"]), '%Y-%m-%d %H:%M:%S')
                             short_date = d.strftime('%m/%d %H:%M')
-                            # :green[...] で緑文字にする
-                            done_str = f" :green[(✔ {short_date})]"
+                            done_str = f" <span style='white-space: nowrap; font-size: 0.9em;'>:green[(✔ {short_date})]</span>"
                         except:
-                            done_str = " :green[(✔ DONE)]"
+                            done_str = " <span style='white-space: nowrap; font-size: 0.9em;'>:green[(✔ DONE)]</span>"
                     
-                    # ラベル作成
                     if is_done:
-                        # 完了時は打ち消し線 + 緑の完了日
                         label = f"~~{person} {task_text}~~{done_str}"
                     else:
-                        # 未完了時は太字 + 赤の期限
                         label = f"**{person} {task_text}**{deadline_str}"
                     
                     new_status = st.checkbox(label, value=is_done, key=f"t_{index}")
