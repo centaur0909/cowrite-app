@@ -31,17 +31,16 @@ def load_data():
     except:
         config = {"ProjectTitle": "Project", "Deadline": "2026-01-01 00:00"}
 
-    # 2. Songs（曲名マッピング） ※今回追加！
+    # 2. Songs（曲名マッピング）
     song_map = {}
     try:
         songs_sheet = wb.worksheet("Songs")
         songs_records = songs_sheet.get_all_records()
-        # {正式名称: 略称} の辞書を作る
         for item in songs_records:
             if item['FormalName'] and item['ShortName']:
                 song_map[item['FormalName']] = item['ShortName']
     except:
-        pass # シートがなくてもエラーにしない
+        pass
 
     # 3. Main（タスク）
     main_sheet = wb.sheet1
@@ -74,7 +73,7 @@ except Exception as e:
 st.set_page_config(page_title=PROJECT_TITLE, page_icon="🦁", layout="centered")
 
 # ==========================================
-# 🎨 CSS (ミニマリスト・スタイル)
+# 🎨 CSS
 # ==========================================
 st.markdown(f"""
 <style>
@@ -85,7 +84,7 @@ st.markdown(f"""
     .block-container {{ 
         padding-top: 2rem !important; 
         padding-bottom: 5rem !important; 
-        max-width: 600px !important; /* 少し狭めて視線移動を減らす */
+        max-width: 600px !important; 
     }}
 
     /* タイトル */
@@ -95,7 +94,7 @@ st.markdown(f"""
         -webkit-background-clip: text; -webkit-text-fill-color: transparent; 
     }}
     
-    /* スタッツバー（ここだけはカード感を残す） */
+    /* スタッツバー */
     .stats-bar {{
         display: flex; justify-content: space-between;
         background: rgba(255, 255, 255, 0.05); border: 1px solid rgba(255, 255, 255, 0.1);
@@ -105,15 +104,14 @@ st.markdown(f"""
     .stats-label {{ font-size: 10px; color: #888; display: block; }}
     .stats-value {{ font-size: 18px; font-weight: 700; display: block; }}
     
-    /* --- 重要：チェックボックスの「枠」を完全撤廃 --- */
-    /* デフォルトの余白を少し詰める */
+    /* チェックボックス周りの調整 */
     div[data-testid="stCheckbox"] {{
         min-height: auto;
-        margin-bottom: 2px; /* 行間を狭く */
+        margin-bottom: 4px; /* 行間 */
     }}
     div[data-testid="stCheckbox"] label {{
-        font-size: 15px; /* 文字サイズ調整 */
-        line-height: 1.4;
+        font-size: 15px;
+        line-height: 1.5; /* スマホでの折り返しを見やすく */
     }}
 
     /* タブのデザイン */
@@ -134,7 +132,7 @@ st.markdown(f"""
 
 st.markdown(f'<div class="custom-title">{PROJECT_TITLE}</div>', unsafe_allow_html=True)
 
-# ⏰ 時計 (V11と同じ)
+# ⏰ 時計
 server_now_ms = int(datetime.now(tz).timestamp() * 1000)
 timer_html_code = f"""
 <!DOCTYPE html>
@@ -198,23 +196,18 @@ if not df.empty and "完了" in df.columns:
     </div>
     """, unsafe_allow_html=True)
 
-# --- タスクリスト（シンプル・テキスト版） ---
+# --- タスクリスト（修正版） ---
 if not df.empty and "曲名" in df.columns:
-    # 曲名のリストを取得
     formal_song_names = df["曲名"].unique()
     
     if len(formal_song_names) > 0:
-        # タブの表示名を作る（マッピングがあれば短縮名、なければ正式名）
         tab_labels = [song_map_db.get(name, name) for name in formal_song_names]
-        
-        # タブ作成
         tabs = st.tabs(tab_labels)
         
         for i, formal_name in enumerate(formal_song_names):
             with tabs[i]:
-                # タブの中身には正式名称を表示
                 st.markdown(f"##### 🎵 {formal_name}")
-                st.write("---") # 区切り線
+                st.write("---") 
                 
                 song_tasks = df[df["曲名"] == formal_name]
                 song_tasks = song_tasks.sort_values(by="完了", ascending=True)
@@ -224,39 +217,34 @@ if not df.empty and "曲名" in df.columns:
                     person = f"【{row['担当']}】" if row['担当'] else ""
                     task_text = row['タスク名']
                     
-                    # --- テキスト結合ロジック（ここがスマホ対策の肝！） ---
-                    # 情報を全て1つの文字列にします。
+                    # --- ここを修正しました ---
+                    # HTMLタグを使わず、Streamlitのカラー記法 :color[text] を使用
                     
-                    # 1. 期限がある場合
-                    deadline_info = ""
+                    # 1. 期限 (未完了の場合)
+                    deadline_str = ""
                     if not is_done and "期限" in row and str(row["期限"]).strip() != "":
-                        # 「(📅 1/20 15:00)」のように追記
-                        deadline_info = f"  (📅 {row['期限']})"
+                        # :red[...] で赤文字にする
+                        deadline_str = f" :red[(📅 {row['期限']})]"
                     
-                    # 2. 完了している場合
-                    done_info = ""
+                    # 2. 完了日時 (完了の場合)
+                    done_str = ""
                     if is_done and "完了日時" in row and str(row["完了日時"]).strip() != "":
-                        # 日付を短く整形
                         try:
                             d = datetime.strptime(str(row["完了日時"]), '%Y-%m-%d %H:%M:%S')
                             short_date = d.strftime('%m/%d %H:%M')
-                            done_info = f"  (✔ {short_date})"
+                            # :green[...] で緑文字にする
+                            done_str = f" :green[(✔ {short_date})]"
                         except:
-                            done_info = "  (✔ DONE)"
+                            done_str = " :green[(✔ DONE)]"
                     
                     # ラベル作成
                     if is_done:
-                        # 完了時は打ち消し線 + 完了日
-                        label = f"~~{person} {task_text}~~ <span style='color:#4CAF50; font-size:0.9em'>{done_info}</span>"
+                        # 完了時は打ち消し線 + 緑の完了日
+                        label = f"~~{person} {task_text}~~{done_str}"
                     else:
-                        # 未完了時は太字 + 期限（赤字）
-                        # ※StreamlitのcheckboxラベルはMarkdownが効きます
-                        label = f"**{person} {task_text}** <span style='color:#FF4B4B; font-size:0.9em'>{deadline_info}</span>"
+                        # 未完了時は太字 + 赤の期限
+                        label = f"**{person} {task_text}**{deadline_str}"
                     
-                    # チェックボックス表示
-                    # ※unsafe_allow_html=True はcheckboxには効かない場合が多いですが、
-                    # StreamlitはMarkdownの色指定に対応しているので、上記の記法で色がつくはずです。
-                    # もし色が出なくても、テキストとしては表示されるので崩れません。
                     new_status = st.checkbox(label, value=is_done, key=f"t_{index}")
 
                     # --- 更新処理 ---
@@ -269,12 +257,11 @@ if not df.empty and "曲名" in df.columns:
                             sheet.update_cell(index + 2, 6, "")
                         st.rerun()
                 
-                st.write("") # スペース
+                st.write("") 
                 
                 # 追加エリア
                 with st.expander("➕ タスク追加"):
                     with st.form(key=f"add_{i}", clear_on_submit=True):
-                        # ここもスマホで入力しやすいよう縦並びに戻すか、シンプルなカラムに
                         new_task = st.text_input("タスク名")
                         task_deadline = st.text_input("期限 (例 1/20)")
                         new_person = st.selectbox("担当", ["-", "三好", "梅澤", "2人"])
