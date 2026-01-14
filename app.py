@@ -57,16 +57,13 @@ try:
     tz = pytz.timezone('Asia/Tokyo')
     now_py = datetime.now(tz)
 
-    # 締め切りの計算（ここを強化）
+    # 締め切りを「数字（タイムスタンプ）」に変換
+    # これが最も確実な受け渡し方法です
     try:
-        # 文字列から日付オブジェクトへ
         dt_obj = datetime.strptime(str(DEADLINE_STR), '%Y-%m-%d %H:%M')
         dt_obj = tz.localize(dt_obj)
-        # JSに渡すための「ミリ秒単位の数値（タイムスタンプ）」に変換
-        # これならブラウザ依存でエラーが出ない
-        DEADLINE_TIMESTAMP = int(dt_obj.timestamp() * 1000) 
+        DEADLINE_TIMESTAMP = int(dt_obj.timestamp() * 1000)
     except:
-        # エラー時は現在時刻
         DEADLINE_TIMESTAMP = int(now_py.timestamp() * 1000)
 
 except Exception as e:
@@ -76,86 +73,53 @@ except Exception as e:
 st.set_page_config(page_title=PROJECT_TITLE, page_icon="▪️", layout="centered")
 
 # ==========================================
-# 🎨 CSS (デザインはV17を維持)
+# 🎨 CSS (V17のデザインを維持)
 # ==========================================
 st.markdown(f"""
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" />
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700&family=Roboto+Mono:wght@400;500;700&display=swap" rel="stylesheet">
 
 <style>
-    /* 1. 全体設定 */
-    .stApp {{
-        background-color: #121212;
-        font-family: 'Inter', 'Helvetica Neue', Arial, sans-serif;
-    }}
-    .block-container {{ 
-        padding-top: 2rem !important; 
-        padding-bottom: 5rem !important; 
-        max-width: 600px !important; 
-    }}
+    /* 全体設定 */
+    .stApp {{ background-color: #121212; font-family: 'Inter', 'Helvetica Neue', Arial, sans-serif; }}
+    .block-container {{ padding-top: 2rem !important; padding-bottom: 5rem !important; max-width: 600px !important; }}
 
-    /* 2. タイトル */
+    /* タイトル */
     .custom-title {{
-        font-size: 20px !important;
-        font-weight: 700;
-        margin-bottom: 24px;
-        color: #E0E0E0;
-        letter-spacing: 0.05em;
-        text-transform: uppercase;
-        border-left: 3px solid #E0E0E0;
-        padding-left: 12px;
+        font-size: 20px !important; font-weight: 700; margin-bottom: 24px; color: #E0E0E0;
+        letter-spacing: 0.05em; text-transform: uppercase; border-left: 3px solid #E0E0E0; padding-left: 12px;
     }}
     
-    /* 3. スタッツバー (完全中央揃え) */
+    /* スタッツバー */
     .stats-bar {{
-        display: flex; 
-        justify-content: space-between;
-        background: #1E1E1E;
-        border: none;
-        padding: 0; 
-        margin-bottom: 30px;
-        border-radius: 4px;
-        overflow: hidden;
+        display: flex; justify-content: space-between; background: #1E1E1E; border: none; padding: 0; 
+        margin-bottom: 30px; border-radius: 4px; overflow: hidden;
     }}
     .stats-item {{ 
         flex: 1; text-align: center; padding: 16px 0; border-right: 1px solid #333;
         display: flex; flex-direction: column; justify-content: center; align-items: center;
     }}
     .stats-item:last-child {{ border-right: none; }}
+    .stats-label {{ font-size: 10px; color: #888; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 6px; line-height: 1; }}
+    .stats-value {{ font-family: 'Roboto Mono', monospace; font-size: 18px; font-weight: 600; color: #F0F0F0; line-height: 1; }}
     
-    .stats-label {{ 
-        font-size: 10px; color: #888; text-transform: uppercase; letter-spacing: 1px; 
-        margin-bottom: 6px; line-height: 1;
-    }}
-    .stats-value {{ 
-        font-family: 'Roboto Mono', monospace; font-size: 18px; font-weight: 600; color: #F0F0F0;
-        line-height: 1;
-    }}
-    
-    /* 4. チェックボックスのフォント強制 */
+    /* チェックボックス */
     div[data-testid="stCheckbox"] label p {{
         font-family: 'Inter', 'Helvetica Neue', Arial, sans-serif !important;
-        font-size: 15px !important;
-        font-weight: 500 !important;
-        color: #D0D0D0 !important;
+        font-size: 15px !important; font-weight: 500 !important; color: #D0D0D0 !important;
     }}
-    div[data-testid="stCheckbox"] {{
-        margin-bottom: -14px !important; 
-    }}
+    div[data-testid="stCheckbox"] {{ margin-bottom: -14px !important; }}
 
-    /* 5. 曲ヘッダー */
+    /* ヘッダー */
     .song-header {{
-        font-family: 'Inter', sans-serif;
-        font-size: 14px; font-weight: 700; color: #999;
-        margin-top: 20px; margin-bottom: 20px;
-        text-transform: uppercase; letter-spacing: 0.05em;
+        font-family: 'Inter', sans-serif; font-size: 14px; font-weight: 700; color: #999;
+        margin-top: 20px; margin-bottom: 20px; text-transform: uppercase; letter-spacing: 0.05em;
     }}
     .custom-hr {{ border: 0; height: 1px; background: #333; margin-top: 0px; margin-bottom: 8px; }}
     
-    /* 6. メタデータ */
+    /* メタデータ */
     .task-meta {{
-        font-family: 'Inter', sans-serif; font-size: 11px !important;
-        margin-left: 28px; margin-bottom: 12px;
+        font-family: 'Inter', sans-serif; font-size: 11px !important; margin-left: 28px; margin-bottom: 12px;
         display: flex; align-items: center; gap: 5px; font-weight: 500;
     }}
     .material-symbols-outlined {{ font-size: 14px !important; vertical-align: bottom; }}
@@ -164,7 +128,6 @@ st.markdown(f"""
     button[data-baseweb="tab"] {{ background-color: transparent !important; color: #666 !important; font-size: 12px !important; font-weight: 600 !important; padding: 8px 16px !important; border-radius: 0px !important; }}
     button[data-baseweb="tab"][aria-selected="true"] {{ color: #FFF !important; border-bottom: 2px solid #FFF !important; }}
 
-    /* 不要要素削除 */
     #MainMenu {{visibility: hidden;}} footer {{visibility: hidden;}} header {{visibility: hidden;}}
 </style>
 """, unsafe_allow_html=True)
@@ -175,10 +138,7 @@ st.markdown(f"""
 
 st.markdown(f'<div class="custom-title">{PROJECT_TITLE}</div>', unsafe_allow_html=True)
 
-# ⏰ タイマー：タイムスタンプ方式（これが修正版）
-# Pythonで現在時刻のミリ秒を取得
-server_now_ms = int(now_py.timestamp() * 1000)
-
+# ⏰ タイマー：絶対停止しないシンプル版
 timer_html_code = f"""
 <!DOCTYPE html>
 <html>
@@ -218,26 +178,18 @@ timer_html_code = f"""
 
     <script>
     (function() {{
-        // 【修正点】文字列ではなく「数値（ミリ秒）」で受け取る
-        const serverTime = {server_now_ms}; 
-        const deadlineMs = {DEADLINE_TIMESTAMP};
-        
-        // ページを開いた瞬間のローカル時間
-        const localTime = Date.now();
-        // サーバーとのズレを計算
-        const timeOffset = serverTime - localTime; 
-        
+        // 余計なサーバー同期を排除し、純粋なターゲット時間を設定
+        const targetTime = {DEADLINE_TIMESTAMP};
         const display = document.getElementById("countdown-text");
 
-        function updateTimer() {{
-            // 現在時刻 = ローカル時刻 + ズレ
-            const now = Date.now() + timeOffset;
-            const diff = deadlineMs - now;
+        function tick() {{
+            const now = Date.now();
+            const diff = targetTime - now;
 
             if (diff <= 0) {{
                 display.innerHTML = "00:00:00";
                 display.className = "timer-display danger-mode";
-                return;
+                return; // 時間切れで停止
             }}
 
             const hours = Math.floor(diff / (1000 * 60 * 60));
@@ -247,7 +199,8 @@ timer_html_code = f"""
             const hStr = String(hours).padStart(2, '0');
             const mStr = String(minutes).padStart(2, '0');
             const sStr = String(seconds).padStart(2, '0');
-            
+
+            // 6時間切ったら赤く点灯
             if (hours < 6) {{
                  if (!display.classList.contains("danger-mode")) {{
                     display.classList.add("danger-mode");
@@ -257,10 +210,13 @@ timer_html_code = f"""
             }}
 
             display.innerHTML = hStr + ":" + mStr + ":" + sStr;
+            
+            // 次の描画フレームで再度実行（setIntervalより確実）
+            requestAnimationFrame(tick);
         }}
         
-        setInterval(updateTimer, 1000); 
-        updateTimer();
+        // 起動
+        tick();
     }})();
     </script>
 </body>
@@ -268,7 +224,7 @@ timer_html_code = f"""
 """
 components.html(timer_html_code, height=100)
 
-# --- スタッツ (完全中央揃え) ---
+# --- スタッツ ---
 if not df.empty and "完了" in df.columns:
     total_tasks = len(df)
     completed_tasks = len(df[df["完了"].astype(str).str.upper() == "TRUE"])
@@ -311,7 +267,6 @@ if not df.empty and "曲名" in df.columns:
                     person = f"[{row['担当']}]" if row['担当'] else ""
                     task_text = row['タスク名']
                     
-                    # 1行目
                     if is_done:
                         label = f"<span style='color:#555;'>{person} {task_text}</span>"
                     else:
@@ -320,7 +275,7 @@ if not df.empty and "曲名" in df.columns:
                     md_label = f"~~{person} {task_text}~~" if is_done else f"**{person} {task_text}**"
                     new_status = st.checkbox(md_label, value=is_done, key=f"t_{index}")
 
-                    # 2行目：アラート機能付きメタデータ
+                    # メタデータ（タスクごとの残り時間アラート）
                     meta_html = ""
                     
                     if is_done and "完了日時" in row and str(row["完了日時"]).strip() != "":
@@ -339,7 +294,6 @@ if not df.empty and "曲名" in df.columns:
                     elif not is_done and "期限" in row and str(row["期限"]).strip() != "":
                          limit_str = str(row["期限"])
                          try:
-                             # 日付パース
                              limit_dt = None
                              patterns = ['%Y-%m-%d %H:%M', '%m/%d %H:%M', '%Y/%m/%d %H:%M']
                              current_year = now_py.year
@@ -358,7 +312,6 @@ if not df.empty and "曲名" in df.columns:
                                  total_seconds = diff_task.total_seconds()
                                  
                                  if total_seconds < 0:
-                                     # 🔴 期限切れ
                                      meta_html = f'''
                                      <div class="task-meta" style="color:#FF5252;">
                                          <span class="material-symbols-outlined">local_fire_department</span>
@@ -366,7 +319,6 @@ if not df.empty and "曲名" in df.columns:
                                      </div>
                                      '''
                                  elif total_seconds < 3600:
-                                     # 🟠 1時間未満
                                      meta_html = f'''
                                      <div class="task-meta" style="color:#FF9100;">
                                          <span class="material-symbols-outlined">priority_high</span>
@@ -374,7 +326,6 @@ if not df.empty and "曲名" in df.columns:
                                      </div>
                                      '''
                                  elif total_seconds < 3600 * 3: 
-                                     # 🟡 3時間未満
                                      meta_html = f'''
                                      <div class="task-meta" style="color:#FFD740;">
                                          <span class="material-symbols-outlined">warning</span>
@@ -382,7 +333,6 @@ if not df.empty and "曲名" in df.columns:
                                      </div>
                                      '''
                                  else:
-                                     # 通常
                                      meta_html = f'''
                                      <div class="task-meta" style="color:#D84315;">
                                          <span class="material-symbols-outlined">event</span>
@@ -398,7 +348,6 @@ if not df.empty and "曲名" in df.columns:
                     if meta_html:
                         st.markdown(meta_html, unsafe_allow_html=True)
 
-                    # --- 更新処理 ---
                     if new_status != is_done:
                         sheet.update_cell(index + 2, 4, "TRUE" if new_status else "FALSE")
                         if new_status:
@@ -410,7 +359,6 @@ if not df.empty and "曲名" in df.columns:
                 
                 st.write("") 
                 
-                # 追加エリア
                 with st.expander("ADD TASK"):
                     with st.form(key=f"add_{i}", clear_on_submit=True):
                         new_task = st.text_input("TASK NAME")
@@ -425,7 +373,6 @@ if not df.empty and "曲名" in df.columns:
                                 time.sleep(0.5)
                                 st.rerun()
 
-                # 削除エリア
                 with st.expander("DELETE"):
                     if len(song_tasks) > 0:
                         with st.form(key=f"del_form_{i}"):
