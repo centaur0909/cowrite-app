@@ -22,25 +22,41 @@ def init_connection():
 
 def load_data():
     wb = init_connection()
+    
+    # 1. Config（設定）
     try:
         config_sheet = wb.worksheet("Config")
         config_records = config_sheet.get_all_records()
         config = {item['Key']: item['Value'] for item in config_records}
     except:
-        config = {"ProjectTitle": "設定読み込みエラー", "Deadline": "2026-01-01 00:00"}
+        config = {"ProjectTitle": "Project", "Deadline": "2026-01-01 00:00"}
 
+    # 2. Songs（曲名マッピング） ※今回追加！
+    song_map = {}
+    try:
+        songs_sheet = wb.worksheet("Songs")
+        songs_records = songs_sheet.get_all_records()
+        # {正式名称: 略称} の辞書を作る
+        for item in songs_records:
+            if item['FormalName'] and item['ShortName']:
+                song_map[item['FormalName']] = item['ShortName']
+    except:
+        pass # シートがなくてもエラーにしない
+
+    # 3. Main（タスク）
     main_sheet = wb.sheet1
     main_data = main_sheet.get_all_records()
-    return config, main_data, main_sheet
+    
+    return config, song_map, main_data, main_sheet
 
 # ---------------------------
-# データの取得 & 初期設定
+# 初期設定
 # ---------------------------
 try:
-    config, data, sheet = load_data()
+    config, song_map_db, data, sheet = load_data()
     df = pd.DataFrame(data)
 
-    PROJECT_TITLE = config.get("ProjectTitle", "無題のプロジェクト")
+    PROJECT_TITLE = config.get("ProjectTitle", "Co-Write Task")
     DEADLINE_STR = config.get("Deadline", "2026-01-01 00:00")
     
     tz = pytz.timezone('Asia/Tokyo')
@@ -52,60 +68,73 @@ try:
         DEADLINE_ISO = datetime.now(tz).isoformat()
 
 except Exception as e:
-    st.error("データベース接続エラー")
+    st.error("データベース読み込みエラー")
     st.stop()
 
 st.set_page_config(page_title=PROJECT_TITLE, page_icon="🦁", layout="centered")
 
 # ==========================================
-# 🎨 CSS (バッジ用スタイルを追加)
+# 🎨 CSS (ミニマリスト・スタイル)
 # ==========================================
 st.markdown(f"""
 <style>
+    /* 全体背景 */
     .stApp {{ background-color: #0E1117; }}
-    .block-container {{ padding-top: 2rem !important; padding-bottom: 5rem !important; max-width: 700px !important; }}
-    .custom-title {{
-        font-size: 28px !important; font-weight: 900; margin-bottom: 10px;
-        background: linear-gradient(90deg, #FF4B4B, #FF914D);
-        -webkit-background-clip: text; -webkit-text-fill-color: transparent; letter-spacing: 0.05em;
+    
+    /* コンテナ幅調整（スマホで見やすく） */
+    .block-container {{ 
+        padding-top: 2rem !important; 
+        padding-bottom: 5rem !important; 
+        max-width: 600px !important; /* 少し狭めて視線移動を減らす */
     }}
-    /* スタッツバー */
+
+    /* タイトル */
+    .custom-title {{
+        font-size: 24px !important; font-weight: 900; margin-bottom: 10px;
+        background: linear-gradient(90deg, #FF4B4B, #FF914D);
+        -webkit-background-clip: text; -webkit-text-fill-color: transparent; 
+    }}
+    
+    /* スタッツバー（ここだけはカード感を残す） */
     .stats-bar {{
         display: flex; justify-content: space-between;
         background: rgba(255, 255, 255, 0.05); border: 1px solid rgba(255, 255, 255, 0.1);
-        padding: 15px; border-radius: 12px; margin-bottom: 20px; backdrop-filter: blur(10px);
+        padding: 10px; border-radius: 8px; margin-bottom: 20px;
     }}
     .stats-item {{ text-align: center; flex: 1; color: #E0E0E0; }}
-    .stats-label {{ font-size: 11px; color: #888; text-transform: uppercase; letter-spacing: 1px; display: block; }}
-    .stats-value {{ font-size: 20px; font-weight: 700; display: block; }}
+    .stats-label {{ font-size: 10px; color: #888; display: block; }}
+    .stats-value {{ font-size: 18px; font-weight: 700; display: block; }}
     
-    /* チェックボックス周りの調整 */
+    /* --- 重要：チェックボックスの「枠」を完全撤廃 --- */
+    /* デフォルトの余白を少し詰める */
     div[data-testid="stCheckbox"] {{
-        background-color: #1A1C24; padding: 10px 15px; border-radius: 8px;
-        border-left: 4px solid #333; transition: all 0.2s ease; min-height: 48px; display: flex; align-items: center;
+        min-height: auto;
+        margin-bottom: 2px; /* 行間を狭く */
     }}
-    div[data-testid="stCheckbox"]:hover {{ background-color: #262830; border-left: 4px solid #FF4B4B; }}
-    
-    /* 期限バッジのデザイン */
-    .badge {{
-        display: inline-block; padding: 4px 8px; border-radius: 4px; font-size: 11px; font-weight: bold;
-        text-align: center; width: 100%; margin-top: 8px; /* チェックボックスとの高さ合わせ */
+    div[data-testid="stCheckbox"] label {{
+        font-size: 15px; /* 文字サイズ調整 */
+        line-height: 1.4;
     }}
-    .badge-deadline {{ background-color: rgba(255, 75, 75, 0.15); color: #FF4B4B; border: 1px solid rgba(255, 75, 75, 0.3); }}
-    .badge-done {{ background-color: rgba(76, 175, 80, 0.15); color: #4CAF50; border: 1px solid rgba(76, 175, 80, 0.3); }}
+
+    /* タブのデザイン */
+    button[data-baseweb="tab"] {{
+        font-size: 13px !important;
+        padding: 0px 10px !important;
+        min-width: auto !important;
+    }}
     
-    /* その他非表示 */
+    /* 不要な要素を隠す */
     #MainMenu {{visibility: hidden;}} footer {{visibility: hidden;}} header {{visibility: hidden;}}
 </style>
 """, unsafe_allow_html=True)
 
 # ---------------------------
-# メイン画面表示
+# メイン画面
 # ---------------------------
 
 st.markdown(f'<div class="custom-title">{PROJECT_TITLE}</div>', unsafe_allow_html=True)
 
-# ⏰ 時計コンポーネント
+# ⏰ 時計 (V11と同じ)
 server_now_ms = int(datetime.now(tz).timestamp() * 1000)
 timer_html_code = f"""
 <!DOCTYPE html>
@@ -114,13 +143,13 @@ timer_html_code = f"""
 <style>
     body {{ margin: 0; padding: 0; font-family: sans-serif; background: transparent; display: flex; flex-direction: column; align-items: center; }}
     .timer-box {{
-        width: 100%; padding: 12px; border-radius: 12px;
+        width: 100%; padding: 10px; border-radius: 8px;
         background: linear-gradient(135deg, #2b303b 0%, #20232a 100%);
-        color: #fff; text-align: center; font-weight: 700; font-size: 20px;
-        border: 1px solid rgba(255,255,255,0.1); box-shadow: 0 4px 6px rgba(0,0,0,0.3);
-        font-variant-numeric: tabular-nums; letter-spacing: 1px;
+        color: #fff; text-align: center; font-weight: 700; font-size: 18px;
+        border: 1px solid rgba(255,255,255,0.1);
+        font-variant-numeric: tabular-nums; 
     }}
-    .deadline-date {{ text-align: center; font-size: 11px; color: #666; margin-top: 4px; }}
+    .deadline-date {{ text-align: center; font-size: 10px; color: #666; margin-top: 4px; }}
     .danger-mode {{ background: linear-gradient(135deg, #3a1c1c 0%, #2a0f0f 100%) !important; border: 1px solid #ff4b4b !important; animation: pulse 2s infinite; }}
     @keyframes pulse {{ 0% {{ box-shadow: 0 0 0 0 rgba(255, 75, 75, 0.4); }} 70% {{ box-shadow: 0 0 0 10px rgba(255, 75, 75, 0); }} 100% {{ box-shadow: 0 0 0 0 rgba(255, 75, 75, 0); }} }}
 </style>
@@ -153,14 +182,7 @@ timer_html_code = f"""
 </body>
 </html>
 """
-components.html(timer_html_code, height=90)
-
-auto_refresh = st.toggle("Auto Refresh (30s)", value=False)
-if auto_refresh:
-    time.sleep(30)
-    st.rerun()
-
-st.write("")
+components.html(timer_html_code, height=85)
 
 # --- スタッツ ---
 if not df.empty and "完了" in df.columns:
@@ -175,23 +197,26 @@ if not df.empty and "完了" in df.columns:
         <div class="stats-item"><span class="stats-label" style="color:#2196F3;">PROGRESS</span><span class="stats-value" style="color:#2196F3;">{rate}%</span></div>
     </div>
     """, unsafe_allow_html=True)
-    
-    if rate == 100 and total_tasks > 0:
-        st.balloons()
-        st.success("🎉 MISSION COMPLETE!")
 
-# --- タスクリスト（左右分割レイアウト） ---
+# --- タスクリスト（シンプル・テキスト版） ---
 if not df.empty and "曲名" in df.columns:
-    song_list = df["曲名"].unique()
+    # 曲名のリストを取得
+    formal_song_names = df["曲名"].unique()
     
-    if len(song_list) > 0:
-        tabs = st.tabs(list(song_list))
+    if len(formal_song_names) > 0:
+        # タブの表示名を作る（マッピングがあれば短縮名、なければ正式名）
+        tab_labels = [song_map_db.get(name, name) for name in formal_song_names]
         
-        for i, song_name in enumerate(song_list):
+        # タブ作成
+        tabs = st.tabs(tab_labels)
+        
+        for i, formal_name in enumerate(formal_song_names):
             with tabs[i]:
-                st.markdown(f"##### 🎵 {song_name}")
+                # タブの中身には正式名称を表示
+                st.markdown(f"##### 🎵 {formal_name}")
+                st.write("---") # 区切り線
                 
-                song_tasks = df[df["曲名"] == song_name]
+                song_tasks = df[df["曲名"] == formal_name]
                 song_tasks = song_tasks.sort_values(by="完了", ascending=True)
                 
                 for index, row in song_tasks.iterrows():
@@ -199,34 +224,40 @@ if not df.empty and "曲名" in df.columns:
                     person = f"【{row['担当']}】" if row['担当'] else ""
                     task_text = row['タスク名']
                     
-                    # 左右分割（左75%：タスク、右25%：バッジ）
-                    c1, c2 = st.columns([0.75, 0.25])
+                    # --- テキスト結合ロジック（ここがスマホ対策の肝！） ---
+                    # 情報を全て1つの文字列にします。
                     
-                    with c1:
-                        # チェックボックス
-                        label = f"~~{person} {task_text}~~" if is_done else f"**{person} {task_text}**"
-                        new_status = st.checkbox(label, value=is_done, key=f"t_{index}")
+                    # 1. 期限がある場合
+                    deadline_info = ""
+                    if not is_done and "期限" in row and str(row["期限"]).strip() != "":
+                        # 「(📅 1/20 15:00)」のように追記
+                        deadline_info = f"  (📅 {row['期限']})"
                     
-                    with c2:
-                        # バッジの表示ロジック
-                        badge_html = ""
-                        # 1. 完了済みの場合 -> 完了日時の時刻だけ表示
-                        if is_done and "完了日時" in row and str(row["完了日時"]).strip() != "":
-                            # 長い日付から時間だけ抽出 (例: 2026-01-15 14:00 -> 1/15 14:00)
-                            try:
-                                d = datetime.strptime(str(row["完了日時"]), '%Y-%m-%d %H:%M:%S')
-                                short_date = d.strftime('%m/%d %H:%M')
-                                badge_html = f'<div class="badge badge-done">✔ {short_date}</div>'
-                            except:
-                                badge_html = '<div class="badge badge-done">DONE</div>'
-                        # 2. 未完了で期限がある場合
-                        elif not is_done and "期限" in row and str(row["期限"]).strip() != "":
-                            limit_str = str(row["期限"])
-                            # シンプルに表示
-                            badge_html = f'<div class="badge badge-deadline">📅 {limit_str}</div>'
-                        
-                        if badge_html:
-                            st.markdown(badge_html, unsafe_allow_html=True)
+                    # 2. 完了している場合
+                    done_info = ""
+                    if is_done and "完了日時" in row and str(row["完了日時"]).strip() != "":
+                        # 日付を短く整形
+                        try:
+                            d = datetime.strptime(str(row["完了日時"]), '%Y-%m-%d %H:%M:%S')
+                            short_date = d.strftime('%m/%d %H:%M')
+                            done_info = f"  (✔ {short_date})"
+                        except:
+                            done_info = "  (✔ DONE)"
+                    
+                    # ラベル作成
+                    if is_done:
+                        # 完了時は打ち消し線 + 完了日
+                        label = f"~~{person} {task_text}~~ <span style='color:#4CAF50; font-size:0.9em'>{done_info}</span>"
+                    else:
+                        # 未完了時は太字 + 期限（赤字）
+                        # ※StreamlitのcheckboxラベルはMarkdownが効きます
+                        label = f"**{person} {task_text}** <span style='color:#FF4B4B; font-size:0.9em'>{deadline_info}</span>"
+                    
+                    # チェックボックス表示
+                    # ※unsafe_allow_html=True はcheckboxには効かない場合が多いですが、
+                    # StreamlitはMarkdownの色指定に対応しているので、上記の記法で色がつくはずです。
+                    # もし色が出なくても、テキストとしては表示されるので崩れません。
+                    new_status = st.checkbox(label, value=is_done, key=f"t_{index}")
 
                     # --- 更新処理 ---
                     if new_status != is_done:
@@ -238,30 +269,26 @@ if not df.empty and "曲名" in df.columns:
                             sheet.update_cell(index + 2, 6, "")
                         st.rerun()
                 
-                st.write("---")
+                st.write("") # スペース
                 
                 # 追加エリア
-                with st.expander("➕ Add New Task"):
+                with st.expander("➕ タスク追加"):
                     with st.form(key=f"add_{i}", clear_on_submit=True):
-                        c_in1, c_in2 = st.columns([2, 1])
-                        with c_in1:
-                            new_task = st.text_input("Task Name")
-                        with c_in2:
-                            task_deadline = st.text_input("Limit (例 1/20 15:00)")
+                        # ここもスマホで入力しやすいよう縦並びに戻すか、シンプルなカラムに
+                        new_task = st.text_input("タスク名")
+                        task_deadline = st.text_input("期限 (例 1/20)")
+                        new_person = st.selectbox("担当", ["-", "三好", "梅澤", "2人"])
                         
-                        PERSON_OPTIONS = ["-", "三好", "梅澤", "2人"]
-                        new_person = st.selectbox("Person", PERSON_OPTIONS)
-                        
-                        if st.form_submit_button("ADD", use_container_width=True):
+                        if st.form_submit_button("追加", use_container_width=True):
                             if new_task:
                                 p_val = new_person if new_person != "-" else ""
-                                sheet.append_row([song_name, new_task, p_val, "FALSE", task_deadline, ""])
-                                st.success("Added!")
+                                sheet.append_row([formal_name, new_task, p_val, "FALSE", task_deadline, ""])
+                                st.success("追加！")
                                 time.sleep(0.5)
                                 st.rerun()
 
                 # 削除エリア
-                with st.expander("🗑️ Delete Tasks"):
+                with st.expander("🗑️ タスク削除"):
                     if len(song_tasks) > 0:
                         with st.form(key=f"del_form_{i}"):
                             rows_to_delete = []
@@ -269,14 +296,14 @@ if not df.empty and "曲名" in df.columns:
                                 if st.checkbox(f"{row['タスク名']}", key=f"del_chk_{idx}"):
                                     rows_to_delete.append(idx + 2)
                             
-                            if st.form_submit_button("DELETE SELECTED", type="primary"):
+                            if st.form_submit_button("選択したタスクを削除", type="primary", use_container_width=True):
                                 if rows_to_delete:
                                     rows_to_delete.sort(reverse=True)
                                     for r in rows_to_delete:
                                         sheet.delete_rows(r)
-                                    st.success("Deleted!")
+                                    st.success("削除完了")
                                     st.rerun()
     else:
-        st.info("No Songs in DB.")
+        st.info("DBに曲がありません")
 else:
-    st.error("Data Load Error")
+    st.error("読み込みエラー")
