@@ -6,6 +6,8 @@ import gspread
 from google.oauth2.service_account import Credentials
 import json
 import time
+# 【重要】これを追加しないと動きません
+import streamlit.components.v1 as components
 
 # ==========================================
 # 🛠 管理者設定エリア
@@ -20,13 +22,14 @@ SONG_MAP = {
     "GO! GO! RUNNER!": "GGR"
 }
 
+# 担当者の選択肢（「2人」に変更済み）
 PERSON_OPTIONS = ["-", "三好", "梅澤", "2人"]
 # ==========================================
 
 st.set_page_config(page_title=PROJECT_TITLE, page_icon="🦁", layout="centered")
 
 # ---------------------------
-# 🎨 CSS
+# 🎨 CSS (全体デザイン用)
 # ---------------------------
 st.markdown(f"""
 <style>
@@ -53,42 +56,6 @@ st.markdown(f"""
         -webkit-text-fill-color: transparent;
     }}
     
-    /* リアルタイム時計のデザイン */
-    .timer-box {{
-        padding: 10px;
-        border-radius: 8px;
-        background-color: #f0f2f6;
-        color: #000000;
-        text-align: center;
-        margin-bottom: 5px; 
-        font-weight: bold;
-        font-size: 18px;
-        border: 1px solid #ddd;
-        font-family: monospace;
-    }}
-    
-    /* 6時間切った時の赤スタイル */
-    .danger-mode {{
-        background-color: #fff0f0 !important;
-        color: #d32f2f !important;
-        border: 2px solid #d32f2f !important;
-        animation: pulse 2s infinite;
-    }}
-    
-    @keyframes pulse {{
-        0% {{ box-shadow: 0 0 0 0 rgba(255, 75, 75, 0.4); }}
-        70% {{ box-shadow: 0 0 0 10px rgba(255, 75, 75, 0); }}
-        100% {{ box-shadow: 0 0 0 0 rgba(255, 75, 75, 0); }}
-    }}
-    
-    /* 日付表示 */
-    .deadline-date {{
-        text-align: center;
-        font-size: 12px;
-        color: #888;
-        margin-bottom: 15px;
-    }}
-
     /* スタッツバー */
     .stats-bar {{
         display: flex;
@@ -152,58 +119,107 @@ def load_data():
 # タイトル
 st.markdown(f'<div class="custom-title">{PROJECT_TITLE}</div>', unsafe_allow_html=True)
 
-# 【ここが修正ポイント】
-# HTMLの「箱」と「スクリプト」を1つのmarkdownブロックにまとめました。
-# これで読み込みタイミングのズレが物理的に起きなくなります。
-timer_html = f"""
-<div id="countdown-box" class="timer-box">⌛ Loading...</div>
-<div class="deadline-date">📅 期限: {DEADLINE_DISPLAY}</div>
-
-<script>
-(function() {{
-    const deadline = new Date("{DEADLINE_ISO}");
-    
-    function updateTimer() {{
-        const now = new Date();
-        const diff = deadline - now;
-        const box = document.getElementById("countdown-box");
-        
-        if (!box) return; // 万が一見つからなくてもエラーを出さない
-
-        if (diff <= 0) {{
-            box.innerHTML = "🚨 TIME UP 🚨";
-            box.className = "timer-box danger-mode";
-            return;
-        }}
-
-        const hours = Math.floor(diff / (1000 * 60 * 60));
-        const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
-        const seconds = Math.floor((diff % (1000 * 60)) / 1000);
-
-        const hStr = String(hours).padStart(2, '0');
-        const mStr = String(minutes).padStart(2, '0');
-        const sStr = String(seconds).padStart(2, '0');
-
-        let emoji = "🔥";
-        if (hours < 6) {{
-            emoji = "😱";
-            if (!box.classList.contains("danger-mode")) {{
-                box.classList.add("danger-mode");
-            }}
-        }} else {{
-            box.classList.remove("danger-mode");
-        }}
-        
-        box.innerHTML = emoji + " 残り " + hStr + ":" + mStr + ":" + sStr;
+# ---------------------------
+# ⏰ ヌルヌル時計コンポーネント (iframe版)
+# ---------------------------
+# ここが修正の核心です。Pythonから独立したHTMLとして埋め込みます。
+timer_html_code = f"""
+<!DOCTYPE html>
+<html>
+<head>
+<style>
+    body {{
+        margin: 0;
+        padding: 0;
+        font-family: sans-serif;
+        background-color: transparent;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
     }}
-    
-    // 即実行＆ループ開始
-    updateTimer();
-    setInterval(updateTimer, 1000);
-}})();
-</script>
+    .timer-box {{
+        width: 95%;
+        padding: 10px;
+        border-radius: 8px;
+        background-color: #f0f2f6;
+        color: #000000;
+        text-align: center;
+        margin-bottom: 5px; 
+        font-weight: bold;
+        font-size: 18px;
+        border: 1px solid #ddd;
+        font-family: monospace;
+        box-sizing: border-box;
+    }}
+    .deadline-date {{
+        text-align: center;
+        font-size: 12px;
+        color: #888;
+        margin-top: 0px;
+    }}
+    .danger-mode {{
+        background-color: #fff0f0 !important;
+        color: #d32f2f !important;
+        border: 2px solid #d32f2f !important;
+        animation: pulse 2s infinite;
+    }}
+    @keyframes pulse {{
+        0% {{ box-shadow: 0 0 0 0 rgba(255, 75, 75, 0.4); }}
+        70% {{ box-shadow: 0 0 0 10px rgba(255, 75, 75, 0); }}
+        100% {{ box-shadow: 0 0 0 0 rgba(255, 75, 75, 0); }}
+    }}
+</style>
+</head>
+<body>
+    <div id="countdown-box" class="timer-box">⌛ Loading...</div>
+    <div class="deadline-date">📅 期限: {DEADLINE_DISPLAY}</div>
+
+    <script>
+    (function() {{
+        const deadline = new Date("{DEADLINE_ISO}");
+        const box = document.getElementById("countdown-box");
+
+        function updateTimer() {{
+            const now = new Date();
+            const diff = deadline - now;
+
+            if (diff <= 0) {{
+                box.innerHTML = "🚨 TIME UP 🚨";
+                box.className = "timer-box danger-mode";
+                return;
+            }}
+
+            const hours = Math.floor(diff / (1000 * 60 * 60));
+            const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+            const seconds = Math.floor((diff % (1000 * 60)) / 1000);
+
+            const hStr = String(hours).padStart(2, '0');
+            const mStr = String(minutes).padStart(2, '0');
+            const sStr = String(seconds).padStart(2, '0');
+
+            let emoji = "🔥";
+            if (hours < 6) {{
+                emoji = "😱";
+                if (!box.classList.contains("danger-mode")) {{
+                    box.classList.add("danger-mode");
+                }}
+            }} else {{
+                box.classList.remove("danger-mode");
+            }}
+            
+            box.innerHTML = emoji + " 残り " + hStr + ":" + mStr + ":" + sStr;
+        }}
+        
+        setInterval(updateTimer, 1000);
+        updateTimer();
+    }})();
+    </script>
+</body>
+</html>
 """
-st.markdown(timer_html, unsafe_allow_html=True)
+
+# HTMLをiframeとして埋め込む（高さ85px確保）
+components.html(timer_html_code, height=85)
 
 
 # データ自動更新スイッチ
