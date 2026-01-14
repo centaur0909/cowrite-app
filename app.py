@@ -2,9 +2,12 @@ import streamlit as st
 import pandas as pd
 from datetime import datetime
 import pytz
+import gspread
+from google.oauth2.service_account import Credentials
+import json
 
 # ---------------------------
-# 1. ページ設定 & デザイン調整
+# 1. ページ設定
 # ---------------------------
 st.set_page_config(page_title="Co-Write Sprinter", page_icon="🦁", layout="centered")
 
@@ -23,43 +26,44 @@ hide_streamlit_style = """
 st.markdown(hide_streamlit_style, unsafe_allow_html=True)
 
 # ---------------------------
-# 2. ロジック（時間計算）
+# 2. スプレッドシート接続機能（心臓部）
+# ---------------------------
+# キャッシュを使って接続を高速化
+@st.cache_resource
+def init_connection():
+    # Secretsから鍵情報を取り出して、JSONに戻す
+    key_dict = json.loads(st.secrets["gcp_service_account"]["info"])
+    
+    scopes = ["https://www.googleapis.com/auth/spreadsheets"]
+    creds = Credentials.from_service_account_info(key_dict, scopes=scopes)
+    client = gspread.authorize(creds)
+    
+    # シートを開く（名前が間違っているとエラーになるので注意！）
+    return client.open("CoWrite_DB").sheet1
+
+# データを読み込む関数
+def load_data():
+    sheet = init_connection()
+    # 全データを辞書形式で取得
+    data = sheet.get_all_records() 
+    return data, sheet
+
+# ---------------------------
+# 3. ロジック（時間計算）
 # ---------------------------
 DEADLINE = datetime(2026, 1, 14, 23, 59, 0, tzinfo=pytz.timezone('Asia/Tokyo'))
 now = datetime.now(pytz.timezone('Asia/Tokyo'))
 diff = DEADLINE - now
 
 # ---------------------------
-# 3. データ管理（ここが進化！）
-# ---------------------------
-# アプリがリロードされてもデータを保持するための「セッションステート」を使います
-
-# もしデータがまだなければ、初期データを作る
-if 'tasks' not in st.session_state:
-    st.session_state['tasks'] = {
-        "Pose & Gimmick": [
-            {"name": "ギター本番録音", "person": "三好", "done": True},
-            {"name": "サビ構成変更", "person": "梅澤", "done": True},
-        ],
-        "絶対的マスターピース！": [
-            {"name": "歌データ送信", "person": "三好", "done": True},
-            {"name": "ブラス追加・Mix", "person": "梅澤", "done": False},
-        ],
-        "GO! GO! RUNNER!": [
-            {"name": "アレンジ提出", "person": "梅澤", "done": False},
-            {"name": "BPM/Key固定確認", "person": "三好", "done": True},
-        ]
-    }
-
-# ---------------------------
 # 4. メイン画面
 # ---------------------------
+# デッドライン表示
 if diff.total_seconds() > 0:
     days = diff.days
     hours = diff.seconds // 3600
     minutes = (diff.seconds % 3600) // 60
     progress_val = max(0, min(100, int((1 - diff.total_seconds() / (7*24*60*60)) * 100)))
-    
     st.markdown(f'<p class="big-font">🔥 DEADLINEまで：あと {hours}時間 {minutes}分</p>', unsafe_allow_html=True)
     st.progress(progress_val)
 else:
@@ -67,63 +71,68 @@ else:
 
 st.write("---") 
 
-# タブ表示
-tab1, tab2, tab3 = st.tabs(["1. Pose", "2. Masterpiece", "3. Runner"])
+# --- ここからスプレッドシート連携モード ---
 
-# タスク表示用の関数
-def render_tab(song_key):
-    st.markdown(f"**🎵 {song_key}**")
-    
-    # --- タスク追加フォーム ---
-    with st.expander("➕ タスクを追加する"):
-        with st.form(key=f"add_{song_key}"):
-            col1, col2 = st.columns([3, 1])
-            with col1:
-                new_task = st.text_input("タスク名")
-            with col2:
-                new_person = st.selectbox("担当", ["三好", "梅澤", "二人"])
+try:
+    # データの読み込み
+    data, sheet = load_data()
+    df = pd.DataFrame(data)
+
+    # タブ表示
+    SONG_LIST = ["Pose & Gimmick", "絶対的マスターピース！", "GO! GO! RUNNER!"]
+    tabs = st.tabs([f"{i+1}. {s.split()[0]}" for i, s in enumerate(SONG_LIST)])
+
+    for i, song_name in enumerate(SONG_LIST):
+        with tabs[i]:
+            st.markdown(f"**🎵 {song_name}**")
             
-            submit = st.form_submit_button("追加")
-            
-            if submit and new_task:
-                # リストに追加する処理
-                st.session_state['tasks'][song_key].append(
-                    {"name": new_task, "person": new_person, "done": False}
-                )
-                st.success("追加しました！")
-                st.rerun() # 即座に画面を更新
+            # --- タスク追加フォーム ---
+            with st.expander("➕ タスクを追加する"):
+                with st.form(key=f"add_{i}"):
+                    col1, col2 = st.columns([3, 1])
+                    with col1:
+                        new_task = st.text_input("タスク名")
+                    with col2:
+                        new_person = st.selectbox("担当", ["三好", "梅澤", "二人"])
+                    
+                    submit = st.form_submit_button("追加")
+                    
+                    if submit and new_task:
+                        # スプレッドシートに追記
+                        # A列:曲名, B列:タスク, C列:担当, D列:完了(FALSE)
+                        sheet.append_row([song_name, new_task, new_person, "FALSE"])
+                        st.success("追加しました！")
+                        st.rerun()
 
-    # --- タスクリスト表示 ---
-    task_list = st.session_state['tasks'][song_key]
-    
-    done_count = 0
-    for i, task in enumerate(task_list):
-        # アイコンではなく「名前」で表示
-        label = f"【{task['person']}】 {task['name']}"
-        
-        # チェックボックス
-        # keyを工夫して、どのタスクか特定できるようにする
-        is_checked = st.checkbox(label, value=task["done"], key=f"{song_key}_{i}")
-        
-        # 状態を更新
-        st.session_state['tasks'][song_key][i]["done"] = is_checked
-        
-        if is_checked:
-            done_count += 1
-            
-    # 進捗率
-    if len(task_list) > 0:
-        progress = done_count / len(task_list)
-        st.caption(f"進捗: {int(progress * 100)}%")
-        st.progress(progress)
-    else:
-        st.info("タスクがありません")
+            # --- タスクリスト表示 ---
+            # この曲のタスクだけを抽出
+            if not df.empty and "曲名" in df.columns:
+                song_tasks = df[df["曲名"] == song_name]
+                
+                if len(song_tasks) == 0:
+                    st.info("まだタスクがありません")
+                
+                for index, row in song_tasks.iterrows():
+                    # チェックボックスの状態
+                    is_done = str(row["完了"]).upper() == "TRUE"
+                    
+                    label = f"【{row['担当']}】 {row['タスク名']}"
+                    
+                    # チェックボックス
+                    # keyには行番号(index)を使ってユニークにする
+                    new_status = st.checkbox(label, value=is_done, key=f"task_{index}")
+                    
+                    # 状態が変わったらスプレッドシートを更新
+                    if new_status != is_done:
+                        # スプレッドシートの行番号は「Pythonのindex + 2」（1行目はヘッダー、indexは0始まりのため）
+                        sheet_row_num = index + 2
+                        # D列（4列目）を更新
+                        sheet.update_cell(sheet_row_num, 4, "TRUE" if new_status else "FALSE")
+                        st.rerun()
+            else:
+                st.info("データがありません。タスクを追加してください。")
 
-with tab1:
-    render_tab("Pose & Gimmick")
-
-with tab2:
-    render_tab("絶対的マスターピース！")
-
-with tab3:
-    render_tab("GO! GO! RUNNER!")
+except Exception as e:
+    st.error("⚠️ エラーが発生しました！")
+    st.warning("スプレッドシートの名前は「CoWrite_DB」ですか？ シートの1行目に「曲名」「タスク名」「担当」「完了」が入っていますか？")
+    st.code(e)
