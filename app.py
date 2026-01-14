@@ -5,7 +5,7 @@ import pytz
 import gspread
 from google.oauth2.service_account import Credentials
 import json
-import time
+import re # 正規表現を使うためのライブラリを追加
 import streamlit.components.v1 as components
 
 # ==========================================
@@ -20,6 +20,8 @@ def init_connection():
     wb = client.open("CoWrite_DB")
     return wb
 
+# キャッシュの有効期限を60秒に設定（DB更新を反映しやすくするため）
+@st.cache_data(ttl=60)
 def load_data():
     wb = init_connection()
     try:
@@ -45,26 +47,51 @@ def load_data():
     return config, song_map, main_data, main_sheet
 
 # ---------------------------
-# データ取得
+# データ取得 & 強力な日付解析
 # ---------------------------
 try:
     config, song_map_db, data, sheet = load_data()
     df = pd.DataFrame(data)
 
     PROJECT_TITLE = config.get("ProjectTitle", "Co-Write Task")
-    DEADLINE_STR = config.get("Deadline", "2026-01-01 00:00")
+    # DBから生の文字列を取得
+    raw_deadline = str(config.get("Deadline", "2026-01-01 00:00"))
     
     tz = pytz.timezone('Asia/Tokyo')
     now_py = datetime.now(tz)
 
-    # 締め切りを「数字（タイムスタンプ）」に変換
-    # これが最も確実な受け渡し方法です
+    # === 🔥 日付解析ロジック (V20.0 Update) ===
+    # どんな形式（/、-、全角、時間なし）でも読み取れるように正規化する
     try:
-        dt_obj = datetime.strptime(str(DEADLINE_STR), '%Y-%m-%d %H:%M')
+        # 1. 全角数字を半角に、全角スペースを半角に
+        clean_str = raw_deadline.translate(str.maketrans({chr(0xFF01 + i): chr(0x21 + i) for i in range(94)}))
+        clean_str = clean_str.replace('　', ' ').strip()
+        
+        # 2. 区切り文字をハイフンに統一 (2026/01/15 -> 2026-01-15)
+        clean_str = clean_str.replace('/', '-')
+        
+        # 3. 時間が含まれていない場合（日付だけの場合）、23:59を補完
+        if ':' not in clean_str:
+            clean_str += ' 23:59'
+
+        # 4. パース実行（秒がある場合とない場合の両対応）
+        try:
+            dt_obj = datetime.strptime(clean_str, '%Y-%m-%d %H:%M:%S')
+        except ValueError:
+            dt_obj = datetime.strptime(clean_str, '%Y-%m-%d %H:%M')
+            
         dt_obj = tz.localize(dt_obj)
         DEADLINE_TIMESTAMP = int(dt_obj.timestamp() * 1000)
-    except:
-        DEADLINE_TIMESTAMP = int(now_py.timestamp() * 1000)
+        
+        # UI表示用の綺麗な文字列も更新
+        DEADLINE_STR = dt_obj.strftime('%Y-%m-%d %H:%M')
+
+    except Exception as e:
+        # 万が一解析できない場合はエラーを表示して、とりあえず明日の同時刻にする（0にならないように）
+        st.error(f"⚠️ 日付エラー: DBの日付「{raw_deadline}」を読み取れませんでした。YYYY-MM-DD HH:MM形式で入力してください。")
+        fallback_date = now_py.replace(hour=23, minute=59, second=0)
+        DEADLINE_TIMESTAMP = int(fallback_date.timestamp() * 1000)
+        DEADLINE_STR = "日付設定エラー"
 
 except Exception as e:
     st.error("System Error: DB Connection Failed")
@@ -73,24 +100,19 @@ except Exception as e:
 st.set_page_config(page_title=PROJECT_TITLE, page_icon="▪️", layout="centered")
 
 # ==========================================
-# 🎨 CSS (V17のデザインを維持)
+# 🎨 CSS (デザイン維持)
 # ==========================================
 st.markdown(f"""
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" />
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700&family=Roboto+Mono:wght@400;500;700&display=swap" rel="stylesheet">
 
 <style>
-    /* 全体設定 */
     .stApp {{ background-color: #121212; font-family: 'Inter', 'Helvetica Neue', Arial, sans-serif; }}
     .block-container {{ padding-top: 2rem !important; padding-bottom: 5rem !important; max-width: 600px !important; }}
-
-    /* タイトル */
     .custom-title {{
         font-size: 20px !important; font-weight: 700; margin-bottom: 24px; color: #E0E0E0;
         letter-spacing: 0.05em; text-transform: uppercase; border-left: 3px solid #E0E0E0; padding-left: 12px;
     }}
-    
-    /* スタッツバー */
     .stats-bar {{
         display: flex; justify-content: space-between; background: #1E1E1E; border: none; padding: 0; 
         margin-bottom: 30px; border-radius: 4px; overflow: hidden;
@@ -103,28 +125,24 @@ st.markdown(f"""
     .stats-label {{ font-size: 10px; color: #888; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 6px; line-height: 1; }}
     .stats-value {{ font-family: 'Roboto Mono', monospace; font-size: 18px; font-weight: 600; color: #F0F0F0; line-height: 1; }}
     
-    /* チェックボックス */
     div[data-testid="stCheckbox"] label p {{
         font-family: 'Inter', 'Helvetica Neue', Arial, sans-serif !important;
         font-size: 15px !important; font-weight: 500 !important; color: #D0D0D0 !important;
     }}
     div[data-testid="stCheckbox"] {{ margin-bottom: -14px !important; }}
 
-    /* ヘッダー */
     .song-header {{
         font-family: 'Inter', sans-serif; font-size: 14px; font-weight: 700; color: #999;
         margin-top: 20px; margin-bottom: 20px; text-transform: uppercase; letter-spacing: 0.05em;
     }}
     .custom-hr {{ border: 0; height: 1px; background: #333; margin-top: 0px; margin-bottom: 8px; }}
     
-    /* メタデータ */
     .task-meta {{
         font-family: 'Inter', sans-serif; font-size: 11px !important; margin-left: 28px; margin-bottom: 12px;
         display: flex; align-items: center; gap: 5px; font-weight: 500;
     }}
     .material-symbols-outlined {{ font-size: 14px !important; vertical-align: bottom; }}
 
-    /* タブ */
     button[data-baseweb="tab"] {{ background-color: transparent !important; color: #666 !important; font-size: 12px !important; font-weight: 600 !important; padding: 8px 16px !important; border-radius: 0px !important; }}
     button[data-baseweb="tab"][aria-selected="true"] {{ color: #FFF !important; border-bottom: 2px solid #FFF !important; }}
 
@@ -138,7 +156,7 @@ st.markdown(f"""
 
 st.markdown(f'<div class="custom-title">{PROJECT_TITLE}</div>', unsafe_allow_html=True)
 
-# ⏰ タイマー：絶対停止しないシンプル版
+# ⏰ タイマー：V19のJSエンジン（変更なし）
 timer_html_code = f"""
 <!DOCTYPE html>
 <html>
@@ -178,7 +196,6 @@ timer_html_code = f"""
 
     <script>
     (function() {{
-        // 余計なサーバー同期を排除し、純粋なターゲット時間を設定
         const targetTime = {DEADLINE_TIMESTAMP};
         const display = document.getElementById("countdown-text");
 
@@ -189,7 +206,7 @@ timer_html_code = f"""
             if (diff <= 0) {{
                 display.innerHTML = "00:00:00";
                 display.className = "timer-display danger-mode";
-                return; // 時間切れで停止
+                return; 
             }}
 
             const hours = Math.floor(diff / (1000 * 60 * 60));
@@ -200,7 +217,6 @@ timer_html_code = f"""
             const mStr = String(minutes).padStart(2, '0');
             const sStr = String(seconds).padStart(2, '0');
 
-            // 6時間切ったら赤く点灯
             if (hours < 6) {{
                  if (!display.classList.contains("danger-mode")) {{
                     display.classList.add("danger-mode");
@@ -210,12 +226,9 @@ timer_html_code = f"""
             }}
 
             display.innerHTML = hStr + ":" + mStr + ":" + sStr;
-            
-            // 次の描画フレームで再度実行（setIntervalより確実）
             requestAnimationFrame(tick);
         }}
         
-        // 起動
         tick();
     }})();
     </script>
@@ -294,54 +307,48 @@ if not df.empty and "曲名" in df.columns:
                     elif not is_done and "期限" in row and str(row["期限"]).strip() != "":
                          limit_str = str(row["期限"])
                          try:
-                             limit_dt = None
-                             patterns = ['%Y-%m-%d %H:%M', '%m/%d %H:%M', '%Y/%m/%d %H:%M']
-                             current_year = now_py.year
-                             for pat in patterns:
-                                 try:
-                                     limit_dt = datetime.strptime(limit_str, pat)
-                                     if limit_dt.year == 1900: 
-                                         limit_dt = limit_dt.replace(year=current_year)
-                                     limit_dt = tz.localize(limit_dt)
-                                     break
-                                 except:
-                                     continue
+                             # DBからくる期限も同様にクリーニング
+                             clean_limit = limit_str.translate(str.maketrans({chr(0xFF01 + i): chr(0x21 + i) for i in range(94)}))
+                             clean_limit = clean_limit.replace('/', '-').strip()
+                             if ':' not in clean_limit: clean_limit += ' 23:59'
+
+                             try:
+                                 limit_dt = datetime.strptime(clean_limit, '%Y-%m-%d %H:%M:%S')
+                             except:
+                                 limit_dt = datetime.strptime(clean_limit, '%Y-%m-%d %H:%M')
+                                 
+                             limit_dt = tz.localize(limit_dt)
+                             diff_task = limit_dt - now_py
+                             total_seconds = diff_task.total_seconds()
                              
-                             if limit_dt:
-                                 diff_task = limit_dt - now_py
-                                 total_seconds = diff_task.total_seconds()
-                                 
-                                 if total_seconds < 0:
-                                     meta_html = f'''
-                                     <div class="task-meta" style="color:#FF5252;">
-                                         <span class="material-symbols-outlined">local_fire_department</span>
-                                         OVERDUE ({limit_str})
-                                     </div>
-                                     '''
-                                 elif total_seconds < 3600:
-                                     meta_html = f'''
-                                     <div class="task-meta" style="color:#FF9100;">
-                                         <span class="material-symbols-outlined">priority_high</span>
-                                         DUE SOON ({limit_str})
-                                     </div>
-                                     '''
-                                 elif total_seconds < 3600 * 3: 
-                                     meta_html = f'''
-                                     <div class="task-meta" style="color:#FFD740;">
-                                         <span class="material-symbols-outlined">warning</span>
-                                         DUE ({limit_str})
-                                     </div>
-                                     '''
-                                 else:
-                                     meta_html = f'''
-                                     <div class="task-meta" style="color:#D84315;">
-                                         <span class="material-symbols-outlined">event</span>
-                                         DUE {limit_str}
-                                     </div>
-                                     '''
+                             if total_seconds < 0:
+                                 meta_html = f'''
+                                 <div class="task-meta" style="color:#FF5252;">
+                                     <span class="material-symbols-outlined">local_fire_department</span>
+                                     OVERDUE ({limit_str})
+                                 </div>
+                                 '''
+                             elif total_seconds < 3600:
+                                 meta_html = f'''
+                                 <div class="task-meta" style="color:#FF9100;">
+                                     <span class="material-symbols-outlined">priority_high</span>
+                                     DUE SOON ({limit_str})
+                                 </div>
+                                 '''
+                             elif total_seconds < 3600 * 3: 
+                                 meta_html = f'''
+                                 <div class="task-meta" style="color:#FFD740;">
+                                     <span class="material-symbols-outlined">warning</span>
+                                     DUE ({limit_str})
+                                 </div>
+                                 '''
                              else:
-                                 meta_html = f'<div class="task-meta" style="color:#D84315;"><span class="material-symbols-outlined">event</span> DUE {limit_str}</div>'
-                                 
+                                 meta_html = f'''
+                                 <div class="task-meta" style="color:#D84315;">
+                                     <span class="material-symbols-outlined">event</span>
+                                     DUE {limit_str}
+                                 </div>
+                                 '''
                          except:
                              meta_html = f'<div class="task-meta" style="color:#D84315;"><span class="material-symbols-outlined">event</span> DUE {limit_str}</div>'
                     
