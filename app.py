@@ -22,32 +22,66 @@ SONG_LIST = [
 st.set_page_config(page_title=PROJECT_TITLE, page_icon="🔥", layout="centered")
 
 # ---------------------------
-# 🎨 CSS: スマホ最適化（余白削除・横スクロール防止）
+# 🎨 CSS: V4.0 ファイナル・フィックス
 # ---------------------------
 hide_streamlit_style = """
 <style>
-    /* 不要なヘッダー・フッター削除 */
+    /* 1. 基本設定：ヘッダー隠し・余白最小化 */
     #MainMenu {visibility: hidden;}
     footer {visibility: hidden;}
     header {visibility: hidden;}
     
-    /* 1. 全体の余白をスマホ用に最小化 */
     .block-container {
         padding-top: 1rem !important;
         padding-left: 0.5rem !important;
         padding-right: 0.5rem !important;
-        padding-bottom: 3rem !important;
+        padding-bottom: 5rem !important;
+        max-width: 100% !important;
     }
 
-    /* 2. カラム間の余白を削除（これが横スクロールの元凶） */
-    [data-testid="column"] {
-        padding: 0 !important;
-    }
+    /* 2. 【最重要】カラムの強制横並び設定 */
+    /* Streamlitはスマホでカラムを縦に積もうとするので、それを阻止する */
+    
     [data-testid="stHorizontalBlock"] {
+        flex-direction: row !important; /* 絶対に横並び */
+        flex-wrap: nowrap !important;   /* 折り返し禁止 */
+        align-items: center !important; /* 垂直方向中央揃え */
         gap: 0.5rem !important;
     }
 
-    /* 3. タイトルとデッドライン */
+    [data-testid="column"] {
+        min-width: 0px !important; /* これがないとスマホで縦になる */
+        width: auto !important;
+        flex-shrink: 1 !important; /* 必要なら縮むことを許可 */
+        padding: 0 !important;
+    }
+
+    /* 3. ゴミ箱ボタンのエリア固定 */
+    /* 2つ目のカラム（ゴミ箱）をピンポイントで指定 */
+    div[data-testid="column"]:nth-of-type(2) {
+        flex: 0 0 40px !important; /* 幅40px固定 */
+        min-width: 40px !important;
+        max-width: 40px !important;
+    }
+
+    /* 4. テキスト表示エリアの調整 */
+    div[data-testid="column"]:nth-of-type(1) {
+        flex-grow: 1 !important; /* 残りのスペースを全部使う */
+        overflow: hidden !important; /* はみ出たら隠す */
+    }
+
+    /* 5. ゴミ箱ボタンのデザイン */
+    div[data-testid="column"]:nth-of-type(2) button {
+        border: 1px solid #ccc !important;
+        background-color: #f9f9f9 !important;
+        color: #333 !important;
+        height: 35px !important;
+        width: 100% !important;
+        padding: 0 !important;
+        line-height: 1 !important;
+    }
+
+    /* 6. タイトル・文字周り */
     .custom-title {
         font-size: 20px !important;
         font-weight: 700;
@@ -61,31 +95,15 @@ hide_streamlit_style = """
         color: #FF4B4B;
         font-weight: bold;
     }
-
-    /* 4. 入力フォームの微調整 */
-    .stTextInput input {
-        font-size: 16px !important;
+    
+    /* 横スクロール対策 */
+    body {
+        overflow-x: hidden !important;
     }
     
-    /* 5. ボタン（ゴミ箱）のサイズ強制 */
-    div[data-testid="column"]:nth-of-type(2) button {
-        border: 1px solid #ddd !important;
-        background-color: #f0f2f6 !important;
-        color: #333 !important;
-        height: 2.5rem !important;
-        width: 100% !important;
-        padding: 0 !important;
-        margin-top: 3px !important; /* チェックボックスと高さを合わせる */
-    }
-
-    /* チェックボックスの余白調整 */
+    /* チェックボックス位置微調整 */
     .stCheckbox {
-        margin-top: 0px !important;
-    }
-    
-    /* チェックボックスのラベル文字サイズ */
-    .stCheckbox label p {
-        font-size: 14px !important;
+        margin-top: -3px !important;
     }
 </style>
 """
@@ -146,16 +164,16 @@ try:
         with tabs[i]:
             st.markdown(f"**🎵 {song_name}**")
             
-            # --- 入力フォーム（安全確実な縦並び） ---
+            # --- 入力フォーム（安全第一：縦積み） ---
             with st.expander("➕ タスク追加", expanded=False):
                 with st.form(key=f"add_{i}", clear_on_submit=True):
                     # 1. タスク名
                     new_task = st.text_input("タスク名", placeholder="例：ギター録音")
                     
-                    # 2. 担当者（カラムを使わず縦に積む＝絶対に崩れない）
+                    # 2. 担当者
                     new_person = st.selectbox("担当", ["-", "三好", "梅澤", "二人"])
                     
-                    # 3. 追加ボタン（全幅で押しやすく）
+                    # 3. 追加ボタン（全幅）
                     submit = st.form_submit_button("リストに追加", use_container_width=True)
                     
                     if submit and new_task:
@@ -179,9 +197,8 @@ try:
                     person = f"【{row['担当']}】" if row['担当'] not in ["-", ""] else ""
                     label = f"{person}{row['タスク名']}"
                     
-                    # カラム比率：テキスト(8.5) : ゴミ箱(1.5)
-                    # gap="small" で余白を最小化
-                    col_task, col_del = st.columns([0.85, 0.15], gap="small")
+                    # ここが修正の肝：カラム比率をPython側でも指定するが、CSSで強制的に上書きされる
+                    col_task, col_del = st.columns([0.85, 0.15])
                     
                     with col_task:
                         new_status = st.checkbox(label, value=is_done, key=f"t_{index}")
@@ -190,7 +207,7 @@ try:
                             st.rerun()
                     
                     with col_del:
-                        # アイコンのみ、ラベルなし
+                        # ゴミ箱ボタン
                         if st.button("🗑", key=f"d_{index}"):
                             sheet.delete_rows(index + 2)
                             st.rerun()
