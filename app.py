@@ -22,7 +22,7 @@ SONG_LIST = [
 st.set_page_config(page_title=PROJECT_TITLE, page_icon="🦁", layout="centered")
 
 # ---------------------------
-# 🎨 CSS: 視認性修正 & スタッツ横並び
+# 🎨 CSS
 # ---------------------------
 hide_streamlit_style = """
 <style>
@@ -49,31 +49,37 @@ hide_streamlit_style = """
         -webkit-text-fill-color: transparent;
     }
     
-    /* タイマー（修正：文字色を黒に強制固定） */
+    /* タイマー */
     .timer-box {
         padding: 8px;
         border-radius: 8px;
-        background-color: #f0f2f6; /* 薄いグレー */
-        color: #000000 !important; /* ★ここ重要：文字を黒にする */
+        background-color: #f0f2f6;
+        color: #000000 !important;
         text-align: center;
-        margin-bottom: 10px;
+        margin-bottom: 5px; /* 下のマージンを詰める */
         font-weight: bold;
         font-size: 16px;
         border: 1px solid #ddd;
     }
-    
-    /* タイマー（ヤバイ時） */
     .timer-danger {
         background-color: #fff0f0;
-        color: #d32f2f !important; /* 赤文字 */
+        color: #d32f2f !important;
         border: 2px solid #d32f2f;
     }
+    
+    /* 復活させた日付表示のデザイン */
+    .deadline-date {
+        text-align: center;
+        font-size: 12px;
+        color: #888;
+        margin-bottom: 15px;
+    }
 
-    /* スタッツバー（新設：横並び強制） */
+    /* スタッツバー */
     .stats-bar {
         display: flex;
         justify-content: space-between;
-        background-color: #262730; /* ダークモードに合う背景 */
+        background-color: #262730;
         padding: 10px;
         border-radius: 8px;
         margin-bottom: 15px;
@@ -133,7 +139,7 @@ diff = deadline_dt - now
 # タイトル
 st.markdown(f'<div class="custom-title">{PROJECT_TITLE}</div>', unsafe_allow_html=True)
 
-# デッドライン表示（修正版）
+# デッドライン表示
 if diff.total_seconds() > 0:
     hours = diff.seconds // 3600
     minutes = (diff.seconds % 3600) // 60
@@ -145,10 +151,12 @@ if diff.total_seconds() > 0:
         f'<div class="{timer_class}">{emoji} 残り {hours}時間 {minutes}分</div>', 
         unsafe_allow_html=True
     )
+    # 【復活】日付表示
+    st.markdown(f'<div class="deadline-date">📅 期限: {DEADLINE_STR}</div>', unsafe_allow_html=True)
 else:
     st.error("🚨 締め切り過ぎてます！提出急げ！")
 
-# 自動更新スイッチ（コンパクトに）
+# 自動更新スイッチ
 auto_refresh = st.toggle("🔄 自動更新", value=False)
 if auto_refresh:
     time.sleep(30)
@@ -160,13 +168,12 @@ try:
     data, sheet = load_data()
     df = pd.DataFrame(data)
     
-    # --- スタッツ表示（V6.1: 横並びHTML版） ---
+    # --- スタッツ表示 ---
     if not df.empty and "完了" in df.columns:
         total_tasks = len(df)
         completed_tasks = len(df[df["完了"].astype(str).str.upper() == "TRUE"])
         rate = int((completed_tasks / total_tasks) * 100) if total_tasks > 0 else 0
         
-        # HTMLで直接書くことで、絶対に横並びにする
         st.markdown(f"""
         <div class="stats-bar">
             <div class="stats-item">
@@ -184,7 +191,6 @@ try:
         </div>
         """, unsafe_allow_html=True)
         
-        # コンプリート演出
         if rate == 100 and total_tasks > 0:
             st.balloons()
             st.success("🎉 全タスク完了！")
@@ -203,7 +209,6 @@ try:
                     is_done = str(row["完了"]).upper() == "TRUE"
                     person = f"【{row['担当']}】" if row['担当'] not in ["-", ""] else ""
                     
-                    # 取り消し線
                     task_text = row['タスク名']
                     label = f"~~{person}{task_text}~~" if is_done else f"{person}{task_text}"
                     
@@ -230,26 +235,35 @@ try:
                             time.sleep(0.5)
                             st.rerun()
 
-            # 削除エリア
-            with st.expander("🗑️ タスク整理"):
+            # 削除エリア（改善版：チェックリスト方式）
+            # multiselectをやめて、チェックボックス一覧にする
+            with st.expander("🗑️ タスク整理（削除）"):
                 if not df.empty and "曲名" in df.columns and len(song_tasks) > 0:
-                    del_opts = [f"{r['タスク名']}" for idx, r in song_tasks.iterrows()]
-                    selected_text = st.multiselect("削除するタスク", del_opts)
+                    st.caption("削除したいタスクにチェックを入れてください")
                     
-                    if st.button("削除実行", key=f"del_{i}"):
-                        if selected_text:
-                            rows_to_del = []
-                            for txt in selected_text:
-                                target_rows = song_tasks[song_tasks['タスク名'] == txt].index
-                                for r_idx in target_rows:
-                                    rows_to_del.append(r_idx + 2)
-                            
-                            rows_to_del = sorted(list(set(rows_to_del)), reverse=True)
-                            for r in rows_to_del:
-                                sheet.delete_rows(r)
-                            st.success("削除完了")
-                            time.sleep(1)
-                            st.rerun()
+                    # 削除用のフォーム
+                    with st.form(key=f"del_form_{i}"):
+                        rows_to_delete = []
+                        # 削除対象を選ぶチェックボックスを並べる
+                        for idx, row in song_tasks.iterrows():
+                            # 分かりやすくタスク名を表示
+                            if st.checkbox(f"{row['タスク名']}", key=f"del_chk_{idx}"):
+                                rows_to_delete.append(idx + 2)
+                        
+                        # 削除ボタン
+                        if st.form_submit_button("チェックしたタスクを削除", type="primary", use_container_width=True):
+                            if rows_to_delete:
+                                # 下から順に消さないと行がズレるのでソートして逆順に
+                                rows_to_delete.sort(reverse=True)
+                                for r in rows_to_delete:
+                                    sheet.delete_rows(r)
+                                st.success("削除しました")
+                                time.sleep(1)
+                                st.rerun()
+                            else:
+                                st.warning("削除するタスクが選択されていません")
+                else:
+                    st.info("削除できるタスクがありません")
 
 except Exception as e:
     st.error("エラー")
