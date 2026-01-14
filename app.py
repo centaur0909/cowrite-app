@@ -11,7 +11,9 @@ import time
 # 🛠 管理者設定エリア
 # ==========================================
 PROJECT_TITLE = "🏆 リンプラリベンジ"  
-DEADLINE_STR = "2026-01-14 23:59"
+# JavaScriptに渡すために ISO形式 (YYYY-MM-DDTHH:MM:SS+09:00) で書くのが確実です
+DEADLINE_ISO = "2026-01-14T23:59:00+09:00"
+DEADLINE_DISPLAY = "2026-01-14 23:59"
 
 # 左：DB検索用、右：タブ表示用
 SONG_MAP = {
@@ -24,61 +26,72 @@ SONG_MAP = {
 st.set_page_config(page_title=PROJECT_TITLE, page_icon="🦁", layout="centered")
 
 # ---------------------------
-# 🎨 CSS
+# 🎨 CSS & JavaScript (時計機能)
 # ---------------------------
-hide_streamlit_style = """
+# ここに「ヌルヌル動く時計」のプログラムを埋め込みます
+st.markdown(f"""
 <style>
     /* 基本設定 */
-    #MainMenu {visibility: hidden;}
-    footer {visibility: hidden;}
-    header {visibility: hidden;}
+    #MainMenu {{visibility: hidden;}}
+    footer {{visibility: hidden;}}
+    header {{visibility: hidden;}}
     
-    .block-container {
+    .block-container {{
         padding-top: 1rem !important;
         padding-left: 0.5rem !important;
         padding-right: 0.5rem !important;
         padding-bottom: 5rem !important;
         max-width: 100% !important;
-    }
+    }}
 
     /* タイトル */
-    .custom-title {
+    .custom-title {{
         font-size: 24px !important;
         font-weight: 800;
         margin-bottom: 5px;
         background: -webkit-linear-gradient(45deg, #FF4B4B, #FF914D);
         -webkit-background-clip: text;
         -webkit-text-fill-color: transparent;
-    }
+    }}
     
-    /* タイマー */
-    .timer-box {
-        padding: 8px;
+    /* リアルタイム時計のデザイン */
+    #countdown-box {{
+        padding: 10px;
         border-radius: 8px;
         background-color: #f0f2f6;
-        color: #000000 !important;
+        color: #000000;
         text-align: center;
         margin-bottom: 5px; 
         font-weight: bold;
-        font-size: 16px;
+        font-size: 18px;
         border: 1px solid #ddd;
-    }
-    .timer-danger {
-        background-color: #fff0f0;
+        font-family: monospace; /* 数字がブレないように等幅フォント */
+    }}
+    
+    /* 6時間切った時の赤スタイル */
+    .danger-mode {{
+        background-color: #fff0f0 !important;
         color: #d32f2f !important;
-        border: 2px solid #d32f2f;
-    }
+        border: 2px solid #d32f2f !important;
+        animation: pulse 2s infinite;
+    }}
+    
+    @keyframes pulse {{
+        0% {{ box-shadow: 0 0 0 0 rgba(255, 75, 75, 0.4); }}
+        70% {{ box-shadow: 0 0 0 10px rgba(255, 75, 75, 0); }}
+        100% {{ box-shadow: 0 0 0 0 rgba(255, 75, 75, 0); }}
+    }}
     
     /* 日付表示 */
-    .deadline-date {
+    .deadline-date {{
         text-align: center;
         font-size: 12px;
         color: #888;
         margin-bottom: 15px;
-    }
+    }}
 
     /* スタッツバー */
-    .stats-bar {
+    .stats-bar {{
         display: flex;
         justify-content: space-between;
         background-color: #262730;
@@ -86,38 +99,77 @@ hide_streamlit_style = """
         border-radius: 8px;
         margin-bottom: 15px;
         border: 1px solid #444;
-    }
-    .stats-item {
+    }}
+    .stats-item {{
         text-align: center;
         flex: 1;
         color: white;
-    }
-    .stats-label {
+    }}
+    .stats-label {{
         font-size: 10px;
         color: #aaa;
         display: block;
-    }
-    .stats-value {
+    }}
+    .stats-value {{
         font-size: 18px;
         font-weight: bold;
         display: block;
-    }
+    }}
 
     /* 横スクロール対策 */
-    body { overflow-x: hidden !important; }
+    body {{ overflow-x: hidden !important; }}
     
     /* チェックボックス */
-    .stCheckbox { margin-bottom: 8px !important; }
+    .stCheckbox {{ margin-bottom: 8px !important; }}
     
-    /* タブの文字サイズ */
-    button[data-baseweb="tab"] {
+    button[data-baseweb="tab"] {{
         font-size: 14px !important;
         padding-left: 10px !important;
         padding-right: 10px !important;
-    }
+    }}
 </style>
-"""
-st.markdown(hide_streamlit_style, unsafe_allow_html=True)
+
+<script>
+function updateTimer() {{
+    const deadline = new Date("{DEADLINE_ISO}");
+    const now = new Date();
+    const diff = deadline - now;
+
+    const box = document.getElementById("countdown-box");
+    
+    if (diff <= 0) {{
+        box.innerHTML = "🚨 DEADLINE PASSED 🚨";
+        box.className = "danger-mode";
+        return;
+    }}
+
+    const hours = Math.floor(diff / (1000 * 60 * 60));
+    const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+    const seconds = Math.floor((diff % (1000 * 60)) / 1000);
+
+    // ゼロ埋め (09分 05秒 みたいにする)
+    const hStr = String(hours).padStart(2, '0');
+    const mStr = String(minutes).padStart(2, '0');
+    const sStr = String(seconds).padStart(2, '0');
+
+    // 表示更新
+    let emoji = "🔥";
+    if (hours < 6) {{
+        emoji = "😱";
+        box.classList.add("danger-mode");
+    }} else {{
+        box.classList.remove("danger-mode");
+    }}
+    
+    box.innerHTML = emoji + " 残り " + hStr + ":" + mStr + ":" + sStr;
+}}
+
+// 1秒ごとに実行
+setInterval(updateTimer, 1000);
+// 初回実行
+setTimeout(updateTimer, 100);
+</script>
+""", unsafe_allow_html=True)
 
 # ---------------------------
 # 接続 & ロジック
@@ -135,12 +187,6 @@ def load_data():
     data = sheet.get_all_records() 
     return data, sheet
 
-tz = pytz.timezone('Asia/Tokyo')
-deadline_dt = datetime.strptime(DEADLINE_STR, '%Y-%m-%d %H:%M')
-deadline_dt = tz.localize(deadline_dt)
-now = datetime.now(tz)
-diff = deadline_dt - now
-
 # ---------------------------
 # メイン画面
 # ---------------------------
@@ -148,24 +194,12 @@ diff = deadline_dt - now
 # タイトル
 st.markdown(f'<div class="custom-title">{PROJECT_TITLE}</div>', unsafe_allow_html=True)
 
-# デッドライン表示
-if diff.total_seconds() > 0:
-    hours = diff.seconds // 3600
-    minutes = (diff.seconds % 3600) // 60
-    
-    timer_class = "timer-box timer-danger" if hours < 6 else "timer-box"
-    emoji = "😱" if hours < 6 else "🔥"
-    
-    st.markdown(
-        f'<div class="{timer_class}">{emoji} 残り {hours}時間 {minutes}分</div>', 
-        unsafe_allow_html=True
-    )
-    st.markdown(f'<div class="deadline-date">📅 期限: {DEADLINE_STR}</div>', unsafe_allow_html=True)
-else:
-    st.error("🚨 締め切り過ぎてます！提出急げ！")
+# 時計表示エリア（中身はJavaScriptが書き換えます）
+st.markdown('<div id="countdown-box">⌛ Loading Timer...</div>', unsafe_allow_html=True)
+st.markdown(f'<div class="deadline-date">📅 期限: {DEADLINE_DISPLAY}</div>', unsafe_allow_html=True)
 
-# 自動更新スイッチ
-auto_refresh = st.toggle("🔄 自動更新", value=False)
+# データ自動更新スイッチ（時計とは無関係にデータをリロードするかどうか）
+auto_refresh = st.toggle("🔄 データの自動取得 (30秒)", value=False)
 if auto_refresh:
     time.sleep(30)
     st.rerun()
@@ -213,12 +247,9 @@ try:
             if not df.empty and "曲名" in df.columns:
                 song_tasks = df[df["曲名"] == song_name]
                 
-                # 【ここが魔法の1行】
-                # "完了"列を基準に並び替え（FALSE=未完了 が先、TRUE=完了 が後）
-                # 文字列で比較されるので "FALSE" < "TRUE" となり、未完了が上に来ます
+                # 自動整列：未完了(FALSE)を上に、完了(TRUE)を下に
                 song_tasks = song_tasks.sort_values(by="完了", ascending=True)
                 
-                # リスト表示
                 for index, row in song_tasks.iterrows():
                     is_done = str(row["完了"]).upper() == "TRUE"
                     person = f"【{row['担当']}】" if row['担当'] not in ["-", ""] else ""
@@ -226,7 +257,6 @@ try:
                     task_text = row['タスク名']
                     label = f"~~{person}{task_text}~~" if is_done else f"{person}{task_text}"
                     
-                    # チェックするとデータ更新 → リロード → ソート順反映（下に移動）の流れ
                     new_status = st.checkbox(label, value=is_done, key=f"t_{index}")
                     
                     if new_status != is_done:
@@ -270,7 +300,6 @@ try:
                     with st.form(key=f"del_form_{i}"):
                         rows_to_delete = []
                         for idx, row in song_tasks.iterrows():
-                            # 削除リストも見やすくソートされた順序で出ます
                             if st.checkbox(f"{row['タスク名']}", key=f"del_chk_{idx}"):
                                 rows_to_delete.append(idx + 2)
                         
