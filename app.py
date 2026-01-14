@@ -21,23 +21,25 @@ hide_streamlit_style = """
                 font-weight: bold;
                 color: #FF4B4B;
             }
+            /* 削除ボタンを少し小さくする調整 */
+            .stButton button {
+                padding: 0px 10px;
+                font-size: 0.8rem;
+            }
             </style>
             """
 st.markdown(hide_streamlit_style, unsafe_allow_html=True)
 
 # ---------------------------
-# 2. スプレッドシート接続機能（ここを修正しました！）
+# 2. スプレッドシート接続機能
 # ---------------------------
 @st.cache_resource
 def init_connection():
     key_dict = json.loads(st.secrets["gcp_service_account"]["info"])
-    
-    # 【修正】スプレッドシートだけでなく、ドライブの権限も追加
     scopes = [
         "https://www.googleapis.com/auth/spreadsheets",
         "https://www.googleapis.com/auth/drive"
     ]
-    
     creds = Credentials.from_service_account_info(key_dict, scopes=scopes)
     client = gspread.authorize(creds)
     return client.open("CoWrite_DB").sheet1
@@ -69,7 +71,7 @@ else:
 
 st.write("---") 
 
-# --- ここからスプレッドシート連携モード ---
+# --- スプレッドシート連携モード ---
 
 try:
     data, sheet = load_data()
@@ -82,9 +84,10 @@ try:
         with tabs[i]:
             st.markdown(f"**🎵 {song_name}**")
             
-            # タスク追加フォーム
-            with st.expander("➕ タスクを追加する"):
-                with st.form(key=f"add_{i}"):
+            # --- タスク追加フォーム ---
+            # 【変更点1】clear_on_submit=True を追加（送信後に自動クリア）
+            with st.expander("➕ タスクを追加する", expanded=False):
+                with st.form(key=f"add_{i}", clear_on_submit=True):
                     col1, col2 = st.columns([3, 1])
                     new_task = st.text_input("タスク名")
                     new_person = st.selectbox("担当", ["三好", "梅澤", "二人"])
@@ -96,7 +99,7 @@ try:
                         st.success("追加しました！")
                         st.rerun()
 
-            # タスクリスト表示
+            # --- タスクリスト表示 ---
             if not df.empty and "曲名" in df.columns:
                 song_tasks = df[df["曲名"] == song_name]
                 
@@ -107,12 +110,25 @@ try:
                     is_done = str(row["完了"]).upper() == "TRUE"
                     label = f"【{row['担当']}】 {row['タスク名']}"
                     
-                    new_status = st.checkbox(label, value=is_done, key=f"task_{index}")
+                    # レイアウトを分割（チェックボックスと削除ボタン）
+                    col_task, col_del = st.columns([0.85, 0.15])
                     
-                    if new_status != is_done:
-                        sheet_row_num = index + 2
-                        sheet.update_cell(sheet_row_num, 4, "TRUE" if new_status else "FALSE")
-                        st.rerun()
+                    with col_task:
+                        # チェックボックス
+                        new_status = st.checkbox(label, value=is_done, key=f"task_{index}")
+                        if new_status != is_done:
+                            sheet_row_num = index + 2
+                            sheet.update_cell(sheet_row_num, 4, "TRUE" if new_status else "FALSE")
+                            st.rerun()
+                    
+                    with col_del:
+                        # 【変更点2】削除ボタン
+                        # keyをユニークにするためにindexを使う
+                        if st.button("🗑️", key=f"del_{index}"):
+                            sheet_row_num = index + 2
+                            sheet.delete_rows(sheet_row_num)
+                            st.rerun()
+
             else:
                 st.info("データがありません。タスクを追加してください。")
 
