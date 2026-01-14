@@ -21,10 +21,15 @@ hide_streamlit_style = """
                 font-weight: bold;
                 color: #FF4B4B;
             }
-            /* 削除ボタンを少し小さくする調整 */
+            /* ボタンの余白を極限まで削ってスマホで1行に収める */
             .stButton button {
-                padding: 0px 10px;
-                font-size: 0.8rem;
+                padding: 0rem 0.5rem;
+                line-height: 1.5;
+                height: auto;
+            }
+            /* チェックボックスの余白調整 */
+            .stCheckbox {
+                padding-top: 5px;
             }
             </style>
             """
@@ -50,7 +55,7 @@ def load_data():
     return data, sheet
 
 # ---------------------------
-# 3. ロジック（時間計算）
+# 3. ロジック
 # ---------------------------
 DEADLINE = datetime(2026, 1, 14, 23, 59, 0, tzinfo=pytz.timezone('Asia/Tokyo'))
 now = datetime.now(pytz.timezone('Asia/Tokyo'))
@@ -71,8 +76,6 @@ else:
 
 st.write("---") 
 
-# --- スプレッドシート連携モード ---
-
 try:
     data, sheet = load_data()
     df = pd.DataFrame(data)
@@ -85,17 +88,19 @@ try:
             st.markdown(f"**🎵 {song_name}**")
             
             # --- タスク追加フォーム ---
-            # 【変更点1】clear_on_submit=True を追加（送信後に自動クリア）
             with st.expander("➕ タスクを追加する", expanded=False):
                 with st.form(key=f"add_{i}", clear_on_submit=True):
-                    col1, col2 = st.columns([3, 1])
+                    col1, col2 = st.columns([3, 1.2])
                     new_task = st.text_input("タスク名")
-                    new_person = st.selectbox("担当", ["三好", "梅澤", "二人"])
+                    # 【修正1】先頭に "-" を入れて、リセット時にここに戻るようにした
+                    new_person = st.selectbox("担当", ["-", "三好", "梅澤", "二人"])
                     
                     submit = st.form_submit_button("追加")
                     
                     if submit and new_task:
-                        sheet.append_row([song_name, new_task, new_person, "FALSE"])
+                        # "-" が選ばれていたら空欄にするか、そのまま登録するか
+                        person_val = new_person if new_person != "-" else ""
+                        sheet.append_row([song_name, new_task, person_val, "FALSE"])
                         st.success("追加しました！")
                         st.rerun()
 
@@ -108,13 +113,16 @@ try:
                 
                 for index, row in song_tasks.iterrows():
                     is_done = str(row["完了"]).upper() == "TRUE"
-                    label = f"【{row['担当']}】 {row['タスク名']}"
                     
-                    # レイアウトを分割（チェックボックスと削除ボタン）
-                    col_task, col_del = st.columns([0.85, 0.15])
+                    # 担当者が空欄の場合の表示調整
+                    person_label = f"【{row['担当']}】" if row['担当'] else "【未定】"
+                    label = f"{person_label} {row['タスク名']}"
+                    
+                    # 【修正2】比率を調整してスマホで1行に収める
+                    # [5, 1] くらいの比率にすると、狭い画面でも横並びを維持しやすい
+                    col_task, col_del = st.columns([5, 1])
                     
                     with col_task:
-                        # チェックボックス
                         new_status = st.checkbox(label, value=is_done, key=f"task_{index}")
                         if new_status != is_done:
                             sheet_row_num = index + 2
@@ -122,8 +130,6 @@ try:
                             st.rerun()
                     
                     with col_del:
-                        # 【変更点2】削除ボタン
-                        # keyをユニークにするためにindexを使う
                         if st.button("🗑️", key=f"del_{index}"):
                             sheet_row_num = index + 2
                             sheet.delete_rows(sheet_row_num)
