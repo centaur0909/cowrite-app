@@ -231,12 +231,12 @@ try:
 
             st.write("---")
 
-            # 追加エリア（担当者記憶機能つき）
+            # 追加エリア（インデントエラーを修正済み！）
             with st.expander("➕ タスク追加"):
                 with st.form(key=f"add_{i}", clear_on_submit=True):
                     new_task = st.text_input("タスク名")
                     
-                    # セッションステートから前回の担当者を取得（デフォルトは一番上）
+                    # 担当者の記憶ロジック
                     PERSON_OPTIONS = ["-", "三好", "梅澤", "二人"]
                     last_person_key = f"last_person_{i}"
                     default_index = 0
@@ -244,3 +244,46 @@ try:
                     if last_person_key in st.session_state:
                         last_p = st.session_state[last_person_key]
                         if last_p in PERSON_OPTIONS:
+                            default_index = PERSON_OPTIONS.index(last_p)
+
+                    new_person = st.selectbox("担当", PERSON_OPTIONS, index=default_index)
+                    
+                    if st.form_submit_button("追加", use_container_width=True):
+                        if new_task:
+                            p_val = new_person if new_person != "-" else ""
+                            sheet.append_row([song_name, new_task, p_val, "FALSE"])
+                            
+                            # 担当者を記憶
+                            st.session_state[last_person_key] = new_person
+                            
+                            st.success("追加！")
+                            time.sleep(0.5)
+                            st.rerun()
+
+            # 削除エリア
+            with st.expander("🗑️ タスク整理（削除）"):
+                if not df.empty and "曲名" in df.columns and len(song_tasks) > 0:
+                    st.caption("削除したいタスクにチェックを入れてください")
+                    
+                    with st.form(key=f"del_form_{i}"):
+                        rows_to_delete = []
+                        for idx, row in song_tasks.iterrows():
+                            if st.checkbox(f"{row['タスク名']}", key=f"del_chk_{idx}"):
+                                rows_to_delete.append(idx + 2)
+                        
+                        if st.form_submit_button("チェックしたタスクを削除", type="primary", use_container_width=True):
+                            if rows_to_delete:
+                                rows_to_delete.sort(reverse=True)
+                                for r in rows_to_delete:
+                                    sheet.delete_rows(r)
+                                st.success("削除しました")
+                                time.sleep(1)
+                                st.rerun()
+                            else:
+                                st.warning("削除するタスクが選択されていません")
+                else:
+                    st.info("削除できるタスクがありません")
+
+except Exception as e:
+    st.error("エラー")
+    st.code(e)
