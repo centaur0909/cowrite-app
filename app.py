@@ -8,15 +8,17 @@ import json
 import time
 
 # ==========================================
-# 🛠 管理者設定エリア
+# 🛠 管理者設定エリア（ここを変えました！）
 # ==========================================
 PROJECT_TITLE = "🏆 リンプラリベンジ"  
 DEADLINE_STR = "2026-01-14 23:59"
-SONG_LIST = [
-    "Pose & Gimmick", 
-    "絶対的マスターピース！", 
-    "GO! GO! RUNNER!"
-]
+
+# 左側が「DB検索用（正式名称）」、右側が「タブ表示用（短縮名）」
+SONG_MAP = {
+    "Pose & Gimmick": "P&G", 
+    "絶対的マスターピース！": "絶マス", 
+    "GO! GO! RUNNER!": "GGR"
+}
 # ==========================================
 
 st.set_page_config(page_title=PROJECT_TITLE, page_icon="🦁", layout="centered")
@@ -107,7 +109,7 @@ hide_streamlit_style = """
     /* チェックボックス */
     .stCheckbox { margin-bottom: 8px !important; }
     
-    /* タブの文字サイズ調整（フルネームでも入りきるように少し小さく） */
+    /* タブの文字サイズ */
     button[data-baseweb="tab"] {
         font-size: 14px !important;
         padding-left: 10px !important;
@@ -201,13 +203,14 @@ try:
             st.balloons()
             st.success("🎉 全タスク完了！")
     
-    # 【ここを修正しました】
-    # 以前のコード: [f"{s.split()[0]}" for s in SONG_LIST] -> 勝手に短縮していた
-    # 今回のコード: SONG_LIST -> そのまま使う
-    tabs = st.tabs(SONG_LIST)
+    # --- タブ生成（短縮名を使用） ---
+    # 辞書の値（P&Gなど）を使ってタブを作る
+    tabs = st.tabs(list(SONG_MAP.values()))
 
-    for i, song_name in enumerate(SONG_LIST):
+    # 辞書をループ（key=正式名, val=短縮名）
+    for i, (song_name, short_name) in enumerate(SONG_MAP.items()):
         with tabs[i]:
+            # タブの中の見出しは正式名称で出す（わかりやすさのため）
             st.markdown(f"**🎵 {song_name}**")
             
             if not df.empty and "曲名" in df.columns:
@@ -244,7 +247,7 @@ try:
                             time.sleep(0.5)
                             st.rerun()
 
-            # 削除エリア（チェックリスト方式）
+            # 削除エリア
             with st.expander("🗑️ タスク整理（削除）"):
                 if not df.empty and "曲名" in df.columns and len(song_tasks) > 0:
                     st.caption("削除したいタスクにチェックを入れてください")
