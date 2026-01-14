@@ -6,7 +6,6 @@ import gspread
 from google.oauth2.service_account import Credentials
 import json
 import time
-# 【重要】これを追加しないと動きません
 import streamlit.components.v1 as components
 
 # ==========================================
@@ -22,14 +21,13 @@ SONG_MAP = {
     "GO! GO! RUNNER!": "GGR"
 }
 
-# 担当者の選択肢（「2人」に変更済み）
 PERSON_OPTIONS = ["-", "三好", "梅澤", "2人"]
 # ==========================================
 
 st.set_page_config(page_title=PROJECT_TITLE, page_icon="🦁", layout="centered")
 
 # ---------------------------
-# 🎨 CSS (全体デザイン用)
+# 🎨 CSS
 # ---------------------------
 st.markdown(f"""
 <style>
@@ -120,9 +118,13 @@ def load_data():
 st.markdown(f'<div class="custom-title">{PROJECT_TITLE}</div>', unsafe_allow_html=True)
 
 # ---------------------------
-# ⏰ ヌルヌル時計コンポーネント (iframe版)
+# ⏰ サーバー同期型・ヌルヌル時計コンポーネント (V9.1)
 # ---------------------------
-# ここが修正の核心です。Pythonから独立したHTMLとして埋め込みます。
+
+# 1. Python側で「正確な現在時刻(ミリ秒)」を取得
+tz = pytz.timezone('Asia/Tokyo')
+server_now_ms = int(datetime.now(tz).timestamp() * 1000)
+
 timer_html_code = f"""
 <!DOCTYPE html>
 <html>
@@ -171,16 +173,24 @@ timer_html_code = f"""
 </style>
 </head>
 <body>
-    <div id="countdown-box" class="timer-box">⌛ Loading...</div>
+    <div id="countdown-box" class="timer-box">⌛ 同期中...</div>
     <div class="deadline-date">📅 期限: {DEADLINE_DISPLAY}</div>
 
     <script>
     (function() {{
+        // Pythonから渡されたサーバー時刻と、締め切り時刻
+        const serverTime = {server_now_ms}; 
         const deadline = new Date("{DEADLINE_ISO}");
+        
+        // ページ読み込み時点での「スマホの時刻」と「サーバー時刻」のズレを計算
+        const localTime = Date.now();
+        const timeOffset = serverTime - localTime; // ズレ（ミリ秒）
+
         const box = document.getElementById("countdown-box");
 
         function updateTimer() {{
-            const now = new Date();
+            // 現在時刻にズレを足して、サーバー時刻に合わせる
+            const now = new Date(Date.now() + timeOffset);
             const diff = deadline - now;
 
             if (diff <= 0) {{
@@ -207,6 +217,7 @@ timer_html_code = f"""
                 box.classList.remove("danger-mode");
             }}
             
+            // ここで日本語表記に変更！
             box.innerHTML = emoji + " 残り " + hStr + "時間" + mStr + "分" + sStr + "秒";
         }}
         
@@ -218,7 +229,6 @@ timer_html_code = f"""
 </html>
 """
 
-# HTMLをiframeとして埋め込む（高さ85px確保）
 components.html(timer_html_code, height=85)
 
 
@@ -296,7 +306,6 @@ try:
                 with st.form(key=f"add_{i}", clear_on_submit=True):
                     new_task = st.text_input("タスク名")
                     
-                    # 担当者の記憶ロジック
                     last_person_key = f"last_person_{i}"
                     default_index = 0
                     
@@ -305,7 +314,6 @@ try:
                         if last_p in PERSON_OPTIONS:
                             default_index = PERSON_OPTIONS.index(last_p)
 
-                    # ここで「2人」が反映されます
                     new_person = st.selectbox("担当", PERSON_OPTIONS, index=default_index)
                     
                     if st.form_submit_button("追加", use_container_width=True):
