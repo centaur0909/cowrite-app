@@ -16,9 +16,9 @@ DEADLINE_ISO = "2026-01-14T23:59:00+09:00"
 DEADLINE_DISPLAY = "2026-01-14 23:59"
 
 SONG_MAP = {
-    "Pose & Gimmick": "P&G", 
+    "ポーズ＆ギミック": "P&G", 
     "絶対的マスターピース！": "絶マス", 
-    "GO! GO! RUNNER!": "GGR"
+    "GO！GO！ランナー！": "GGR"
 }
 
 PERSON_OPTIONS = ["-", "三好", "梅澤", "2人"]
