@@ -8,12 +8,12 @@ import json
 import time
 
 # ==========================================
-# 🛠 管理者設定エリア（ここを変えました！）
+# 🛠 管理者設定エリア
 # ==========================================
 PROJECT_TITLE = "🏆 リンプラリベンジ"  
 DEADLINE_STR = "2026-01-14 23:59"
 
-# 左側が「DB検索用（正式名称）」、右側が「タブ表示用（短縮名）」
+# 左：DB検索用、右：タブ表示用
 SONG_MAP = {
     "Pose & Gimmick": "P&G", 
     "絶対的マスターピース！": "絶マス", 
@@ -203,14 +203,11 @@ try:
             st.balloons()
             st.success("🎉 全タスク完了！")
     
-    # --- タブ生成（短縮名を使用） ---
-    # 辞書の値（P&Gなど）を使ってタブを作る
+    # --- タブ ---
     tabs = st.tabs(list(SONG_MAP.values()))
 
-    # 辞書をループ（key=正式名, val=短縮名）
     for i, (song_name, short_name) in enumerate(SONG_MAP.items()):
         with tabs[i]:
-            # タブの中の見出しは正式名称で出す（わかりやすさのため）
             st.markdown(f"**🎵 {song_name}**")
             
             if not df.empty and "曲名" in df.columns:
@@ -234,44 +231,16 @@ try:
 
             st.write("---")
 
-            # 追加エリア
+            # 追加エリア（担当者記憶機能つき）
             with st.expander("➕ タスク追加"):
                 with st.form(key=f"add_{i}", clear_on_submit=True):
                     new_task = st.text_input("タスク名")
-                    new_person = st.selectbox("担当", ["-", "三好", "梅澤", "二人"])
-                    if st.form_submit_button("追加", use_container_width=True):
-                        if new_task:
-                            p_val = new_person if new_person != "-" else ""
-                            sheet.append_row([song_name, new_task, p_val, "FALSE"])
-                            st.success("追加！")
-                            time.sleep(0.5)
-                            st.rerun()
-
-            # 削除エリア
-            with st.expander("🗑️ タスク整理（削除）"):
-                if not df.empty and "曲名" in df.columns and len(song_tasks) > 0:
-                    st.caption("削除したいタスクにチェックを入れてください")
                     
-                    with st.form(key=f"del_form_{i}"):
-                        rows_to_delete = []
-                        for idx, row in song_tasks.iterrows():
-                            # 分かりやすくタスク名を表示
-                            if st.checkbox(f"{row['タスク名']}", key=f"del_chk_{idx}"):
-                                rows_to_delete.append(idx + 2)
-                        
-                        if st.form_submit_button("チェックしたタスクを削除", type="primary", use_container_width=True):
-                            if rows_to_delete:
-                                rows_to_delete.sort(reverse=True)
-                                for r in rows_to_delete:
-                                    sheet.delete_rows(r)
-                                st.success("削除しました")
-                                time.sleep(1)
-                                st.rerun()
-                            else:
-                                st.warning("削除するタスクが選択されていません")
-                else:
-                    st.info("削除できるタスクがありません")
-
-except Exception as e:
-    st.error("エラー")
-    st.code(e)
+                    # セッションステートから前回の担当者を取得（デフォルトは一番上）
+                    PERSON_OPTIONS = ["-", "三好", "梅澤", "二人"]
+                    last_person_key = f"last_person_{i}"
+                    default_index = 0
+                    
+                    if last_person_key in st.session_state:
+                        last_p = st.session_state[last_person_key]
+                        if last_p in PERSON_OPTIONS:
