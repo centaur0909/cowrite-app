@@ -11,10 +11,11 @@ import streamlit.components.v1 as components
 # ==========================================
 # 🛠 管理者設定エリア
 # ==========================================
-PROJECT_TITLE = "🏆 リンプラリベンジ"  
+PROJECT_TITLE = "🏆 リンプラリベンジ"
 DEADLINE_ISO = "2026-01-14T23:59:00+09:00"
 DEADLINE_DISPLAY = "2026-01-14 23:59"
 
+# 左：DB検索用、右：タブ表示用（DBを書き換えたので、ここも合わせると綺麗です）
 SONG_MAP = {
     "ポーズ＆ギミック": "P&G", 
     "絶対的マスターピース！": "絶マス", 
@@ -27,70 +28,109 @@ PERSON_OPTIONS = ["-", "三好", "梅澤", "2人"]
 st.set_page_config(page_title=PROJECT_TITLE, page_icon="🦁", layout="centered")
 
 # ---------------------------
-# 🎨 CSS
+# 🎨 CSS (ここがデザインの命！)
 # ---------------------------
 st.markdown(f"""
 <style>
-    /* 基本設定 */
-    #MainMenu {{visibility: hidden;}}
-    footer {{visibility: hidden;}}
-    header {{visibility: hidden;}}
+    /* 1. ベースの配色（DAWのようなダークグレー） */
+    .stApp {{
+        background-color: #0E1117;
+    }}
     
+    /* 2. 余白調整 */
     .block-container {{
-        padding-top: 1rem !important;
-        padding-left: 0.5rem !important;
-        padding-right: 0.5rem !important;
+        padding-top: 2rem !important;
         padding-bottom: 5rem !important;
-        max-width: 100% !important;
+        max-width: 700px !important;
     }}
 
-    /* タイトル */
+    /* 3. タイトル（グラデーションで高級感） */
     .custom-title {{
-        font-size: 24px !important;
-        font-weight: 800;
-        margin-bottom: 5px;
-        background: -webkit-linear-gradient(45deg, #FF4B4B, #FF914D);
+        font-size: 28px !important;
+        font-weight: 900;
+        margin-bottom: 10px;
+        background: linear-gradient(90deg, #FF4B4B, #FF914D);
         -webkit-background-clip: text;
         -webkit-text-fill-color: transparent;
+        letter-spacing: 0.05em;
     }}
-    
-    /* スタッツバー */
+
+    /* 4. スタッツバー（カード化） */
     .stats-bar {{
         display: flex;
         justify-content: space-between;
-        background-color: #262730;
-        padding: 10px;
-        border-radius: 8px;
-        margin-bottom: 15px;
-        border: 1px solid #444;
+        background: rgba(255, 255, 255, 0.05); /* 半透明 */
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        padding: 15px;
+        border-radius: 12px;
+        margin-bottom: 20px;
+        backdrop-filter: blur(10px);
     }}
     .stats-item {{
         text-align: center;
         flex: 1;
-        color: white;
+        color: #E0E0E0;
     }}
     .stats-label {{
-        font-size: 10px;
-        color: #aaa;
+        font-size: 11px;
+        color: #888;
+        text-transform: uppercase;
+        letter-spacing: 1px;
         display: block;
+        margin-bottom: 4px;
     }}
     .stats-value {{
-        font-size: 18px;
-        font-weight: bold;
+        font-size: 20px;
+        font-weight: 700;
         display: block;
     }}
 
-    /* 横スクロール対策 */
-    body {{ overflow-x: hidden !important; }}
-    
-    /* チェックボックス */
-    .stCheckbox {{ margin-bottom: 8px !important; }}
-    
-    button[data-baseweb="tab"] {{
-        font-size: 14px !important;
-        padding-left: 10px !important;
-        padding-right: 10px !important;
+    /* 5. タスクリスト（重要：ここをカードっぽくする） */
+    /* チェックボックスの周りに枠をつける */
+    div[data-testid="stCheckbox"] {{
+        background-color: #1A1C24;
+        padding: 12px 15px;
+        border-radius: 8px;
+        border-left: 4px solid #333; /* 左にアクセント線 */
+        margin-bottom: 8px;
+        transition: all 0.2s ease;
     }}
+    /* ホバー時に少し明るく */
+    div[data-testid="stCheckbox"]:hover {{
+        background-color: #262830;
+        border-left: 4px solid #FF4B4B;
+    }}
+
+    /* 完了済み（TRUE）のデザインを変える */
+    /* ※StreamlitのCSSハックは限界がありますが、雰囲気は出せます */
+
+    /* 6. タブのデザイン */
+    button[data-baseweb="tab"] {{
+        background-color: transparent !important;
+        color: #888 !important;
+        font-weight: bold !important;
+        border-radius: 4px !important;
+        margin-right: 4px !important;
+    }}
+    button[data-baseweb="tab"][aria-selected="true"] {{
+        background-color: #262830 !important;
+        color: #fff !important;
+        border-bottom: 2px solid #FF4B4B !important;
+    }}
+
+    /* 7. エキスパンダー（追加・削除エリア）をスタイリッシュに */
+    .streamlit-expanderHeader {{
+        background-color: #1A1C24 !important;
+        border-radius: 8px !important;
+        color: #ddd !important;
+        font-size: 14px !important;
+    }}
+    
+    /* フッターなどの非表示 */
+    #MainMenu {{visibility: hidden;}}
+    footer {{visibility: hidden;}}
+    header {{visibility: hidden;}}
+
 </style>
 """, unsafe_allow_html=True)
 
@@ -118,10 +158,8 @@ def load_data():
 st.markdown(f'<div class="custom-title">{PROJECT_TITLE}</div>', unsafe_allow_html=True)
 
 # ---------------------------
-# ⏰ サーバー同期型・ヌルヌル時計コンポーネント (V9.1)
+# ⏰ 時計（デザイン調整版）
 # ---------------------------
-
-# 1. Python側で「正確な現在時刻(ミリ秒)」を取得
 tz = pytz.timezone('Asia/Tokyo')
 server_now_ms = int(datetime.now(tz).timestamp() * 1000)
 
@@ -131,38 +169,37 @@ timer_html_code = f"""
 <head>
 <style>
     body {{
-        margin: 0;
-        padding: 0;
-        font-family: sans-serif;
+        margin: 0; padding: 0;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
         background-color: transparent;
-        display: flex;
-        flex-direction: column;
-        align-items: center;
+        display: flex; flex-direction: column; align-items: center;
+    }}
+    .timer-container {{
+        width: 100%;
+        display: flex; flex-direction: column; align-items: center;
     }}
     .timer-box {{
-        width: 95%;
-        padding: 10px;
-        border-radius: 8px;
-        background-color: #f0f2f6;
-        color: #000000;
+        width: 100%;
+        padding: 12px;
+        border-radius: 12px;
+        background: linear-gradient(135deg, #2b303b 0%, #20232a 100%);
+        color: #fff;
         text-align: center;
         margin-bottom: 5px; 
-        font-weight: bold;
-        font-size: 18px;
-        border: 1px solid #ddd;
-        font-family: monospace;
-        box-sizing: border-box;
+        font-weight: 700;
+        font-size: 20px;
+        border: 1px solid rgba(255,255,255,0.1);
+        box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+        font-variant-numeric: tabular-nums; /* 数字の幅を揃える */
+        letter-spacing: 1px;
     }}
     .deadline-date {{
-        text-align: center;
-        font-size: 12px;
-        color: #888;
-        margin-top: 0px;
+        text-align: center; font-size: 11px; color: #666; margin-top: 4px; font-weight: 500;
     }}
     .danger-mode {{
-        background-color: #fff0f0 !important;
-        color: #d32f2f !important;
-        border: 2px solid #d32f2f !important;
+        background: linear-gradient(135deg, #3a1c1c 0%, #2a0f0f 100%) !important;
+        color: #ff6b6b !important;
+        border: 1px solid #ff4b4b !important;
         animation: pulse 2s infinite;
     }}
     @keyframes pulse {{
@@ -173,23 +210,21 @@ timer_html_code = f"""
 </style>
 </head>
 <body>
-    <div id="countdown-box" class="timer-box">⌛ 同期中...</div>
-    <div class="deadline-date">📅 期限: {DEADLINE_DISPLAY}</div>
+    <div class="timer-container">
+        <div id="countdown-box" class="timer-box">⌛ Syncing...</div>
+        <div class="deadline-date">DEADLINE: {DEADLINE_DISPLAY}</div>
+    </div>
 
     <script>
     (function() {{
-        // Pythonから渡されたサーバー時刻と、締め切り時刻
         const serverTime = {server_now_ms}; 
         const deadline = new Date("{DEADLINE_ISO}");
-        
-        // ページ読み込み時点での「スマホの時刻」と「サーバー時刻」のズレを計算
         const localTime = Date.now();
-        const timeOffset = serverTime - localTime; // ズレ（ミリ秒）
+        const timeOffset = serverTime - localTime; 
 
         const box = document.getElementById("countdown-box");
 
         function updateTimer() {{
-            // 現在時刻にズレを足して、サーバー時刻に合わせる
             const now = new Date(Date.now() + timeOffset);
             const diff = deadline - now;
 
@@ -209,7 +244,7 @@ timer_html_code = f"""
 
             let emoji = "🔥";
             if (hours < 6) {{
-                emoji = "😱";
+                emoji = "⚡"; // アイコン変更
                 if (!box.classList.contains("danger-mode")) {{
                     box.classList.add("danger-mode");
                 }}
@@ -217,8 +252,9 @@ timer_html_code = f"""
                 box.classList.remove("danger-mode");
             }}
             
-            // ここで日本語表記に変更！
-            box.innerHTML = emoji + " 残り " + hStr + "時間" + mStr + "分" + sStr + "秒";
+            box.innerHTML = emoji + " " + hStr + "<span style='font-size:12px'>H</span> " 
+                            + mStr + "<span style='font-size:12px'>M</span> " 
+                            + sStr + "<span style='font-size:12px'>S</span>";
         }}
         
         setInterval(updateTimer, 1000);
@@ -228,17 +264,15 @@ timer_html_code = f"""
 </body>
 </html>
 """
+components.html(timer_html_code, height=90)
 
-components.html(timer_html_code, height=85)
-
-
-# データ自動更新スイッチ
-auto_refresh = st.toggle("🔄 データの自動取得 (30秒)", value=False)
+# 自動更新スイッチ（目立たないように少し小さく）
+auto_refresh = st.toggle("Auto Refresh (30s)", value=False)
 if auto_refresh:
     time.sleep(30)
     st.rerun()
 
-st.markdown("---") 
+st.write("") # スペース
 
 try:
     data, sheet = load_data()
@@ -250,18 +284,19 @@ try:
         completed_tasks = len(df[df["完了"].astype(str).str.upper() == "TRUE"])
         rate = int((completed_tasks / total_tasks) * 100) if total_tasks > 0 else 0
         
+        # HTMLでカード型スタッツを描画
         st.markdown(f"""
         <div class="stats-bar">
             <div class="stats-item">
-                <span class="stats-label">全タスク</span>
+                <span class="stats-label">TOTAL</span>
                 <span class="stats-value">{total_tasks}</span>
             </div>
             <div class="stats-item">
-                <span class="stats-label" style="color:#4CAF50;">完了</span>
+                <span class="stats-label" style="color:#4CAF50;">DONE</span>
                 <span class="stats-value" style="color:#4CAF50;">{completed_tasks}</span>
             </div>
             <div class="stats-item">
-                <span class="stats-label" style="color:#2196F3;">進捗率</span>
+                <span class="stats-label" style="color:#2196F3;">PROGRESS</span>
                 <span class="stats-value" style="color:#2196F3;">{rate}%</span>
             </div>
         </div>
@@ -269,27 +304,30 @@ try:
         
         if rate == 100 and total_tasks > 0:
             st.balloons()
-            st.success("🎉 全タスク完了！")
+            st.success("🎉 MISSION COMPLETE!")
     
     # --- タブ ---
     tabs = st.tabs(list(SONG_MAP.values()))
 
     for i, (song_name, short_name) in enumerate(SONG_MAP.items()):
         with tabs[i]:
-            st.markdown(f"**🎵 {song_name}**")
+            # 曲名はシンプルに
+            st.markdown(f"##### 🎵 {song_name}")
             
             if not df.empty and "曲名" in df.columns:
                 song_tasks = df[df["曲名"] == song_name]
-                
-                # 自動整列
                 song_tasks = song_tasks.sort_values(by="完了", ascending=True)
                 
                 for index, row in song_tasks.iterrows():
                     is_done = str(row["完了"]).upper() == "TRUE"
                     person = f"【{row['担当']}】" if row['担当'] not in ["-", ""] else ""
-                    
                     task_text = row['タスク名']
-                    label = f"~~{person}{task_text}~~" if is_done else f"{person}{task_text}"
+                    
+                    # 完了時は色を薄くする演出
+                    if is_done:
+                        label = f"~~{person} {task_text}~~"
+                    else:
+                        label = f"**{person} {task_text}**" # 未完了は太字
                     
                     new_status = st.checkbox(label, value=is_done, key=f"t_{index}")
                     
@@ -297,58 +335,56 @@ try:
                         sheet.update_cell(index + 2, 4, "TRUE" if new_status else "FALSE")
                         st.rerun()
             else:
-                st.info("タスクなし")
+                st.info("No Tasks")
 
             st.write("---")
 
             # 追加エリア
-            with st.expander("➕ タスク追加"):
+            with st.expander("➕ Add New Task"):
                 with st.form(key=f"add_{i}", clear_on_submit=True):
-                    new_task = st.text_input("タスク名")
+                    new_task = st.text_input("Task Name")
                     
                     last_person_key = f"last_person_{i}"
                     default_index = 0
-                    
                     if last_person_key in st.session_state:
                         last_p = st.session_state[last_person_key]
                         if last_p in PERSON_OPTIONS:
                             default_index = PERSON_OPTIONS.index(last_p)
 
-                    new_person = st.selectbox("担当", PERSON_OPTIONS, index=default_index)
+                    new_person = st.selectbox("Person", PERSON_OPTIONS, index=default_index)
                     
-                    if st.form_submit_button("追加", use_container_width=True):
+                    if st.form_submit_button("ADD", use_container_width=True):
                         if new_task:
                             p_val = new_person if new_person != "-" else ""
                             sheet.append_row([song_name, new_task, p_val, "FALSE"])
                             st.session_state[last_person_key] = new_person
-                            st.success("追加！")
+                            st.success("Added!")
                             time.sleep(0.5)
                             st.rerun()
 
             # 削除エリア
-            with st.expander("🗑️ タスク整理（削除）"):
+            with st.expander("🗑️ Delete Tasks"):
                 if not df.empty and "曲名" in df.columns and len(song_tasks) > 0:
-                    st.caption("削除したいタスクにチェックを入れてください")
-                    
                     with st.form(key=f"del_form_{i}"):
                         rows_to_delete = []
                         for idx, row in song_tasks.iterrows():
+                            # 削除リストも見やすく
                             if st.checkbox(f"{row['タスク名']}", key=f"del_chk_{idx}"):
                                 rows_to_delete.append(idx + 2)
                         
-                        if st.form_submit_button("チェックしたタスクを削除", type="primary", use_container_width=True):
+                        if st.form_submit_button("DELETE SELECTED", type="primary", use_container_width=True):
                             if rows_to_delete:
                                 rows_to_delete.sort(reverse=True)
                                 for r in rows_to_delete:
                                     sheet.delete_rows(r)
-                                st.success("削除しました")
+                                st.success("Deleted!")
                                 time.sleep(1)
                                 st.rerun()
                             else:
-                                st.warning("削除するタスクが選択されていません")
+                                st.warning("Select tasks to delete")
                 else:
-                    st.info("削除できるタスクがありません")
+                    st.info("No tasks to delete")
 
 except Exception as e:
-    st.error("エラー")
-    st.code(e)
+    st.error("Error connecting to DB")
+    # st.code(e) # エラー詳細は隠す（デザイン優先）
