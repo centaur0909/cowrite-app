@@ -207,7 +207,7 @@ timer_html_code = f"""
                 box.classList.remove("danger-mode");
             }}
             
-            box.innerHTML = emoji + " 残り " + hStr + ":" + mStr + ":" + sStr;
+            box.innerHTML = emoji + " 残り " + hStr + "時間" + mStr + "分" + sStr + "秒";
         }}
         
         setInterval(updateTimer, 1000);
