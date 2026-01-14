@@ -22,7 +22,7 @@ SONG_LIST = [
 st.set_page_config(page_title=PROJECT_TITLE, page_icon="🦁", layout="centered")
 
 # ---------------------------
-# 🎨 CSS: 演出強化 & スマホ最適化
+# 🎨 CSS: 視認性修正 & スタッツ横並び
 # ---------------------------
 hide_streamlit_style = """
 <style>
@@ -33,8 +33,8 @@ hide_streamlit_style = """
     
     .block-container {
         padding-top: 1rem !important;
-        padding-left: 1rem !important;
-        padding-right: 1rem !important;
+        padding-left: 0.5rem !important;
+        padding-right: 0.5rem !important;
         padding-bottom: 5rem !important;
         max-width: 100% !important;
     }
@@ -49,22 +49,50 @@ hide_streamlit_style = """
         -webkit-text-fill-color: transparent;
     }
     
-    /* タイマー（通常） */
+    /* タイマー（修正：文字色を黒に強制固定） */
     .timer-box {
-        padding: 10px;
+        padding: 8px;
         border-radius: 8px;
-        background-color: #f0f2f6;
+        background-color: #f0f2f6; /* 薄いグレー */
+        color: #000000 !important; /* ★ここ重要：文字を黒にする */
         text-align: center;
-        margin-bottom: 15px;
+        margin-bottom: 10px;
         font-weight: bold;
-        font-size: 18px;
+        font-size: 16px;
+        border: 1px solid #ddd;
     }
     
     /* タイマー（ヤバイ時） */
     .timer-danger {
-        color: #FF4B4B;
-        border: 2px solid #FF4B4B;
         background-color: #fff0f0;
+        color: #d32f2f !important; /* 赤文字 */
+        border: 2px solid #d32f2f;
+    }
+
+    /* スタッツバー（新設：横並び強制） */
+    .stats-bar {
+        display: flex;
+        justify-content: space-between;
+        background-color: #262730; /* ダークモードに合う背景 */
+        padding: 10px;
+        border-radius: 8px;
+        margin-bottom: 15px;
+        border: 1px solid #444;
+    }
+    .stats-item {
+        text-align: center;
+        flex: 1;
+        color: white;
+    }
+    .stats-label {
+        font-size: 10px;
+        color: #aaa;
+        display: block;
+    }
+    .stats-value {
+        font-size: 18px;
+        font-weight: bold;
+        display: block;
     }
 
     /* 横スクロール対策 */
@@ -72,15 +100,6 @@ hide_streamlit_style = """
     
     /* チェックボックス */
     .stCheckbox { margin-bottom: 8px !important; }
-    
-    /* スタッツ表示 */
-    div[data-testid="metric-container"] {
-        background-color: #ffffff;
-        padding: 10px;
-        border-radius: 10px;
-        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-        border: 1px solid #eee;
-    }
 </style>
 """
 st.markdown(hide_streamlit_style, unsafe_allow_html=True)
@@ -111,15 +130,14 @@ diff = deadline_dt - now
 # メイン画面
 # ---------------------------
 
-# タイトル（グラデーション文字にしました）
+# タイトル
 st.markdown(f'<div class="custom-title">{PROJECT_TITLE}</div>', unsafe_allow_html=True)
 
-# デッドライン表示（色が変わる演出）
+# デッドライン表示（修正版）
 if diff.total_seconds() > 0:
     hours = diff.seconds // 3600
     minutes = (diff.seconds % 3600) // 60
     
-    # 6時間を切ったら赤くなる
     timer_class = "timer-box timer-danger" if hours < 6 else "timer-box"
     emoji = "😱" if hours < 6 else "🔥"
     
@@ -130,8 +148,8 @@ if diff.total_seconds() > 0:
 else:
     st.error("🚨 締め切り過ぎてます！提出急げ！")
 
-# 自動更新スイッチ（上部に配置）
-auto_refresh = st.toggle("🔄 自動更新 (30秒)", value=False)
+# 自動更新スイッチ（コンパクトに）
+auto_refresh = st.toggle("🔄 自動更新", value=False)
 if auto_refresh:
     time.sleep(30)
     st.rerun()
@@ -142,28 +160,35 @@ try:
     data, sheet = load_data()
     df = pd.DataFrame(data)
     
-    # --- 全体の進捗率を計算してカッコよく表示 ---
+    # --- スタッツ表示（V6.1: 横並びHTML版） ---
     if not df.empty and "完了" in df.columns:
         total_tasks = len(df)
         completed_tasks = len(df[df["完了"].astype(str).str.upper() == "TRUE"])
-        
-        # 3カラムでスタッツ表示
-        kpi1, kpi2, kpi3 = st.columns(3)
-        kpi1.metric("全タスク", f"{total_tasks}個")
-        kpi2.metric("完了", f"{completed_tasks}個")
-        # 進捗率
         rate = int((completed_tasks / total_tasks) * 100) if total_tasks > 0 else 0
-        kpi3.metric("進捗率", f"{rate}%")
         
-        st.progress(rate / 100)
+        # HTMLで直接書くことで、絶対に横並びにする
+        st.markdown(f"""
+        <div class="stats-bar">
+            <div class="stats-item">
+                <span class="stats-label">全タスク</span>
+                <span class="stats-value">{total_tasks}</span>
+            </div>
+            <div class="stats-item">
+                <span class="stats-label" style="color:#4CAF50;">完了</span>
+                <span class="stats-value" style="color:#4CAF50;">{completed_tasks}</span>
+            </div>
+            <div class="stats-item">
+                <span class="stats-label" style="color:#2196F3;">進捗率</span>
+                <span class="stats-value" style="color:#2196F3;">{rate}%</span>
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
         
-        # コンプリート演出！
+        # コンプリート演出
         if rate == 100 and total_tasks > 0:
-            st.balloons() # 風船が飛ぶ！
-            st.success("🎉 全タスク完了！お疲れ様でした！！！")
+            st.balloons()
+            st.success("🎉 全タスク完了！")
     
-    st.write("") # スペース
-
     tabs = st.tabs([f"{s.split()[0]}" for s in SONG_LIST])
 
     for i, song_name in enumerate(SONG_LIST):
@@ -173,26 +198,14 @@ try:
             if not df.empty and "曲名" in df.columns:
                 song_tasks = df[df["曲名"] == song_name]
                 
-                # その曲が100%ならチェックマークをつける
-                s_total = len(song_tasks)
-                s_done = len(song_tasks[song_tasks["完了"].astype(str).str.upper() == "TRUE"])
-                if s_total > 0 and s_total == s_done:
-                    st.success("✅ この曲はコンプリート！")
-                elif s_total > 0:
-                    st.caption(f"あと {s_total - s_done} タスク")
-                    st.progress(s_done / s_total)
-
                 # リスト表示
                 for index, row in song_tasks.iterrows():
                     is_done = str(row["完了"]).upper() == "TRUE"
                     person = f"【{row['担当']}】" if row['担当'] not in ["-", ""] else ""
                     
-                    # 完了したタスクは取り消し線を引く演出（Markdownハック）
+                    # 取り消し線
                     task_text = row['タスク名']
-                    if is_done:
-                        label = f"~~{person}{task_text}~~" # 取り消し線
-                    else:
-                        label = f"{person}{task_text}"
+                    label = f"~~{person}{task_text}~~" if is_done else f"{person}{task_text}"
                     
                     new_status = st.checkbox(label, value=is_done, key=f"t_{index}")
                     
@@ -204,7 +217,7 @@ try:
 
             st.write("---")
 
-            # 追加エリア（シンプル）
+            # 追加エリア
             with st.expander("➕ タスク追加"):
                 with st.form(key=f"add_{i}", clear_on_submit=True):
                     new_task = st.text_input("タスク名")
@@ -217,24 +230,20 @@ try:
                             time.sleep(0.5)
                             st.rerun()
 
-            # 削除エリア（まとめて）
+            # 削除エリア
             with st.expander("🗑️ タスク整理"):
                 if not df.empty and "曲名" in df.columns and len(song_tasks) > 0:
                     del_opts = [f"{r['タスク名']}" for idx, r in song_tasks.iterrows()]
-                    # 選択肢に行番号を含めず、内部で照合する（見た目スッキリ）
                     selected_text = st.multiselect("削除するタスク", del_opts)
                     
                     if st.button("削除実行", key=f"del_{i}"):
                         if selected_text:
-                            # 名前で逆引きして削除（同名タスクがある場合は注意だが、簡易的にはこれでOK）
                             rows_to_del = []
                             for txt in selected_text:
-                                # この曲の中で、かつ名前が一致する行を探す
                                 target_rows = song_tasks[song_tasks['タスク名'] == txt].index
                                 for r_idx in target_rows:
                                     rows_to_del.append(r_idx + 2)
                             
-                            # 重複を除いて降順ソート
                             rows_to_del = sorted(list(set(rows_to_del)), reverse=True)
                             for r in rows_to_del:
                                 sheet.delete_rows(r)
