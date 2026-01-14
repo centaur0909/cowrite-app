@@ -57,13 +57,17 @@ try:
     tz = pytz.timezone('Asia/Tokyo')
     now_py = datetime.now(tz)
 
+    # 締め切りの計算（ここを強化）
     try:
+        # 文字列から日付オブジェクトへ
         dt_obj = datetime.strptime(str(DEADLINE_STR), '%Y-%m-%d %H:%M')
         dt_obj = tz.localize(dt_obj)
-        DEADLINE_ISO = dt_obj.isoformat()
+        # JSに渡すための「ミリ秒単位の数値（タイムスタンプ）」に変換
+        # これならブラウザ依存でエラーが出ない
+        DEADLINE_TIMESTAMP = int(dt_obj.timestamp() * 1000) 
     except:
-        dt_obj = now_py
-        DEADLINE_ISO = now_py.isoformat()
+        # エラー時は現在時刻
+        DEADLINE_TIMESTAMP = int(now_py.timestamp() * 1000)
 
 except Exception as e:
     st.error("System Error: DB Connection Failed")
@@ -72,7 +76,7 @@ except Exception as e:
 st.set_page_config(page_title=PROJECT_TITLE, page_icon="▪️", layout="centered")
 
 # ==========================================
-# 🎨 CSS (フォント強制 & 中央揃え修正)
+# 🎨 CSS (デザインはV17を維持)
 # ==========================================
 st.markdown(f"""
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" />
@@ -105,19 +109,16 @@ st.markdown(f"""
     /* 3. スタッツバー (完全中央揃え) */
     .stats-bar {{
         display: flex; 
-        justify-content: space-between; /* 子要素を均等配置 */
+        justify-content: space-between;
         background: #1E1E1E;
         border: none;
-        padding: 0; /* パディングをなくす */
+        padding: 0; 
         margin-bottom: 30px;
         border-radius: 4px;
-        overflow: hidden; /* 角丸からはみ出さないように */
+        overflow: hidden;
     }}
     .stats-item {{ 
-        flex: 1; /* 3等分 */
-        text-align: center; /* 文字を中央に */
-        padding: 16px 0; /* 上下の余白 */
-        border-right: 1px solid #333;
+        flex: 1; text-align: center; padding: 16px 0; border-right: 1px solid #333;
         display: flex; flex-direction: column; justify-content: center; align-items: center;
     }}
     .stats-item:last-child {{ border-right: none; }}
@@ -131,7 +132,7 @@ st.markdown(f"""
         line-height: 1;
     }}
     
-    /* 4. チェックボックスのフォント強制 (詳細度を上げて適用) */
+    /* 4. チェックボックスのフォント強制 */
     div[data-testid="stCheckbox"] label p {{
         font-family: 'Inter', 'Helvetica Neue', Arial, sans-serif !important;
         font-size: 15px !important;
@@ -151,7 +152,7 @@ st.markdown(f"""
     }}
     .custom-hr {{ border: 0; height: 1px; background: #333; margin-top: 0px; margin-bottom: 8px; }}
     
-    /* 6. メタデータ (アイコン調整) */
+    /* 6. メタデータ */
     .task-meta {{
         font-family: 'Inter', sans-serif; font-size: 11px !important;
         margin-left: 28px; margin-bottom: 12px;
@@ -174,7 +175,8 @@ st.markdown(f"""
 
 st.markdown(f'<div class="custom-title">{PROJECT_TITLE}</div>', unsafe_allow_html=True)
 
-# ⏰ タイマー：サーバー時間同期
+# ⏰ タイマー：タイムスタンプ方式（これが修正版）
+# Pythonで現在時刻のミリ秒を取得
 server_now_ms = int(now_py.timestamp() * 1000)
 
 timer_html_code = f"""
@@ -196,7 +198,6 @@ timer_html_code = f"""
     .timer-display {{
         font-family: 'Roboto Mono', monospace; font-size: 28px; font-weight: 700; color: #E0E0E0; letter-spacing: 2px;
     }}
-    /* 赤色はより明るく視認性高く */
     .danger-mode {{ color: #FF5252 !important; text-shadow: 0 0 15px rgba(255, 82, 82, 0.4); }} 
     
     .deadline-display {{
@@ -217,18 +218,23 @@ timer_html_code = f"""
 
     <script>
     (function() {{
+        // 【修正点】文字列ではなく「数値（ミリ秒）」で受け取る
         const serverTime = {server_now_ms}; 
-        const deadline = new Date("{DEADLINE_ISO}");
+        const deadlineMs = {DEADLINE_TIMESTAMP};
+        
+        // ページを開いた瞬間のローカル時間
         const localTime = Date.now();
+        // サーバーとのズレを計算
         const timeOffset = serverTime - localTime; 
+        
         const display = document.getElementById("countdown-text");
 
         function updateTimer() {{
-            const now = new Date(Date.now() + timeOffset);
-            const diff = deadline - now;
+            // 現在時刻 = ローカル時刻 + ズレ
+            const now = Date.now() + timeOffset;
+            const diff = deadlineMs - now;
 
             if (diff <= 0) {{
-                // 期限切れは 00:00:00 で赤く固定
                 display.innerHTML = "00:00:00";
                 display.className = "timer-display danger-mode";
                 return;
@@ -242,7 +248,6 @@ timer_html_code = f"""
             const mStr = String(minutes).padStart(2, '0');
             const sStr = String(seconds).padStart(2, '0');
             
-            // 残り6時間で赤くなる
             if (hours < 6) {{
                  if (!display.classList.contains("danger-mode")) {{
                     display.classList.add("danger-mode");
@@ -253,7 +258,9 @@ timer_html_code = f"""
 
             display.innerHTML = hStr + ":" + mStr + ":" + sStr;
         }}
-        setInterval(updateTimer, 1000); updateTimer();
+        
+        setInterval(updateTimer, 1000); 
+        updateTimer();
     }})();
     </script>
 </body>
@@ -332,7 +339,7 @@ if not df.empty and "曲名" in df.columns:
                     elif not is_done and "期限" in row and str(row["期限"]).strip() != "":
                          limit_str = str(row["期限"])
                          try:
-                             # 日付パース処理
+                             # 日付パース
                              limit_dt = None
                              patterns = ['%Y-%m-%d %H:%M', '%m/%d %H:%M', '%Y/%m/%d %H:%M']
                              current_year = now_py.year
@@ -351,7 +358,7 @@ if not df.empty and "曲名" in df.columns:
                                  total_seconds = diff_task.total_seconds()
                                  
                                  if total_seconds < 0:
-                                     # 🔴 期限切れ (OVERDUE) - 明るい赤
+                                     # 🔴 期限切れ
                                      meta_html = f'''
                                      <div class="task-meta" style="color:#FF5252;">
                                          <span class="material-symbols-outlined">local_fire_department</span>
@@ -359,7 +366,7 @@ if not df.empty and "曲名" in df.columns:
                                      </div>
                                      '''
                                  elif total_seconds < 3600:
-                                     # 🟠 残り1時間未満 (CRITICAL) - オレンジ
+                                     # 🟠 1時間未満
                                      meta_html = f'''
                                      <div class="task-meta" style="color:#FF9100;">
                                          <span class="material-symbols-outlined">priority_high</span>
@@ -367,7 +374,7 @@ if not df.empty and "曲名" in df.columns:
                                      </div>
                                      '''
                                  elif total_seconds < 3600 * 3: 
-                                     # 🟡 残り3時間未満 (WARNING) - 黄色
+                                     # 🟡 3時間未満
                                      meta_html = f'''
                                      <div class="task-meta" style="color:#FFD740;">
                                          <span class="material-symbols-outlined">warning</span>
@@ -375,7 +382,7 @@ if not df.empty and "曲名" in df.columns:
                                      </div>
                                      '''
                                  else:
-                                     # 通常 (落ち着いたグレー赤)
+                                     # 通常
                                      meta_html = f'''
                                      <div class="task-meta" style="color:#D84315;">
                                          <span class="material-symbols-outlined">event</span>
@@ -438,10 +445,3 @@ if not df.empty and "曲名" in df.columns:
         st.info("NO SONG DATA")
 else:
     st.error("DB CONNECTION ERROR")
-
-# ==========================================
-# 🔄 自動更新 (Auto-Sync)
-# ==========================================
-# 60秒待機してからリロード（ボタン不要で最新状態を保つ）
-time.sleep(60)
-st.rerun()
