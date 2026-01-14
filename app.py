@@ -213,6 +213,11 @@ try:
             if not df.empty and "曲名" in df.columns:
                 song_tasks = df[df["曲名"] == song_name]
                 
+                # 【ここが魔法の1行】
+                # "完了"列を基準に並び替え（FALSE=未完了 が先、TRUE=完了 が後）
+                # 文字列で比較されるので "FALSE" < "TRUE" となり、未完了が上に来ます
+                song_tasks = song_tasks.sort_values(by="完了", ascending=True)
+                
                 # リスト表示
                 for index, row in song_tasks.iterrows():
                     is_done = str(row["完了"]).upper() == "TRUE"
@@ -221,6 +226,7 @@ try:
                     task_text = row['タスク名']
                     label = f"~~{person}{task_text}~~" if is_done else f"{person}{task_text}"
                     
+                    # チェックするとデータ更新 → リロード → ソート順反映（下に移動）の流れ
                     new_status = st.checkbox(label, value=is_done, key=f"t_{index}")
                     
                     if new_status != is_done:
@@ -231,12 +237,11 @@ try:
 
             st.write("---")
 
-            # 追加エリア（インデントエラーを修正済み！）
+            # 追加エリア
             with st.expander("➕ タスク追加"):
                 with st.form(key=f"add_{i}", clear_on_submit=True):
                     new_task = st.text_input("タスク名")
                     
-                    # 担当者の記憶ロジック
                     PERSON_OPTIONS = ["-", "三好", "梅澤", "二人"]
                     last_person_key = f"last_person_{i}"
                     default_index = 0
@@ -252,10 +257,7 @@ try:
                         if new_task:
                             p_val = new_person if new_person != "-" else ""
                             sheet.append_row([song_name, new_task, p_val, "FALSE"])
-                            
-                            # 担当者を記憶
                             st.session_state[last_person_key] = new_person
-                            
                             st.success("追加！")
                             time.sleep(0.5)
                             st.rerun()
@@ -268,6 +270,7 @@ try:
                     with st.form(key=f"del_form_{i}"):
                         rows_to_delete = []
                         for idx, row in song_tasks.iterrows():
+                            # 削除リストも見やすくソートされた順序で出ます
                             if st.checkbox(f"{row['タスク名']}", key=f"del_chk_{idx}"):
                                 rows_to_delete.append(idx + 2)
                         
