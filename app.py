@@ -11,18 +11,15 @@ import time
 # 🛠 管理者設定エリア
 # ==========================================
 PROJECT_TITLE = "🏆 リンプラリベンジ"  
-# JavaScript用 (ISO 8601形式)
 DEADLINE_ISO = "2026-01-14T23:59:00+09:00"
 DEADLINE_DISPLAY = "2026-01-14 23:59"
 
-# 左：DB検索用、右：タブ表示用
 SONG_MAP = {
     "Pose & Gimmick": "P&G", 
     "絶対的マスターピース！": "絶マス", 
     "GO! GO! RUNNER!": "GGR"
 }
 
-# 担当者の選択肢（ここを「2人」に変更しました！）
 PERSON_OPTIONS = ["-", "三好", "梅澤", "2人"]
 # ==========================================
 
@@ -57,7 +54,7 @@ st.markdown(f"""
     }}
     
     /* リアルタイム時計のデザイン */
-    #countdown-box {{
+    .timer-box {{
         padding: 10px;
         border-radius: 8px;
         background-color: #f0f2f6;
@@ -155,55 +152,59 @@ def load_data():
 # タイトル
 st.markdown(f'<div class="custom-title">{PROJECT_TITLE}</div>', unsafe_allow_html=True)
 
-# 時計表示エリア（ここにJavaScriptが時間を流し込みます）
-st.markdown('<div id="countdown-box">⌛ Loading Timer...</div>', unsafe_allow_html=True)
+# 【ここが修正ポイント】
+# HTMLの「箱」と「スクリプト」を1つのmarkdownブロックにまとめました。
+# これで読み込みタイミングのズレが物理的に起きなくなります。
+timer_html = f"""
+<div id="countdown-box" class="timer-box">⌛ Loading...</div>
+<div class="deadline-date">📅 期限: {DEADLINE_DISPLAY}</div>
 
-# 日付表示
-st.markdown(f'<div class="deadline-date">📅 期限: {DEADLINE_DISPLAY}</div>', unsafe_allow_html=True)
-
-# 🔥 修正点: タイマー用JavaScriptを「div」を作った後に読み込むように配置換え
-# これで「箱がない」エラーを防ぎます
-st.markdown(f"""
 <script>
-function updateTimer() {{
+(function() {{
     const deadline = new Date("{DEADLINE_ISO}");
-    const now = new Date();
-    const diff = deadline - now;
-    const box = document.getElementById("countdown-box");
     
-    // まだ箱が生成されていない場合は何もしない（エラー防止）
-    if (!box) return;
+    function updateTimer() {{
+        const now = new Date();
+        const diff = deadline - now;
+        const box = document.getElementById("countdown-box");
+        
+        if (!box) return; // 万が一見つからなくてもエラーを出さない
 
-    if (diff <= 0) {{
-        box.innerHTML = "🚨 TIME UP 🚨";
-        box.className = "danger-mode";
-        return;
-    }}
+        if (diff <= 0) {{
+            box.innerHTML = "🚨 TIME UP 🚨";
+            box.className = "timer-box danger-mode";
+            return;
+        }}
 
-    const hours = Math.floor(diff / (1000 * 60 * 60));
-    const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
-    const seconds = Math.floor((diff % (1000 * 60)) / 1000);
+        const hours = Math.floor(diff / (1000 * 60 * 60));
+        const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+        const seconds = Math.floor((diff % (1000 * 60)) / 1000);
 
-    const hStr = String(hours).padStart(2, '0');
-    const mStr = String(minutes).padStart(2, '0');
-    const sStr = String(seconds).padStart(2, '0');
+        const hStr = String(hours).padStart(2, '0');
+        const mStr = String(minutes).padStart(2, '0');
+        const sStr = String(seconds).padStart(2, '0');
 
-    let emoji = "🔥";
-    if (hours < 6) {{
-        emoji = "😱";
-        box.classList.add("danger-mode");
-    }} else {{
-        box.classList.remove("danger-mode");
+        let emoji = "🔥";
+        if (hours < 6) {{
+            emoji = "😱";
+            if (!box.classList.contains("danger-mode")) {{
+                box.classList.add("danger-mode");
+            }}
+        }} else {{
+            box.classList.remove("danger-mode");
+        }}
+        
+        box.innerHTML = emoji + " 残り " + hStr + ":" + mStr + ":" + sStr;
     }}
     
-    box.innerHTML = emoji + " 残り " + hStr + ":" + mStr + ":" + sStr;
-}}
-// 1秒ごとに実行
-setInterval(updateTimer, 1000);
-// 即時実行
-setTimeout(updateTimer, 500);
+    // 即実行＆ループ開始
+    updateTimer();
+    setInterval(updateTimer, 1000);
+}})();
 </script>
-""", unsafe_allow_html=True)
+"""
+st.markdown(timer_html, unsafe_allow_html=True)
+
 
 # データ自動更新スイッチ
 auto_refresh = st.toggle("🔄 データの自動取得 (30秒)", value=False)
@@ -288,7 +289,7 @@ try:
                         if last_p in PERSON_OPTIONS:
                             default_index = PERSON_OPTIONS.index(last_p)
 
-                    # ここで「2人」など変更後のリストを使います
+                    # ここで「2人」が反映されます
                     new_person = st.selectbox("担当", PERSON_OPTIONS, index=default_index)
                     
                     if st.form_submit_button("追加", use_container_width=True):
