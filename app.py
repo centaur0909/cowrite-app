@@ -6,20 +6,24 @@ import gspread
 from google.oauth2.service_account import Credentials
 import json
 import time
-import requests # 👈 追加：通知を送るためのライブラリ
+import requests
 import streamlit.components.v1 as components
 
 # ==========================================
-# 🛠 接続設定
+# 🛠 接続設定 (高速化 & 安全対策版)
 # ==========================================
+# ttl=600 (10分) でキャッシュを自動リセット。これで高速かつエラー知らずになります。
+@st.cache_resource(ttl=600)
 def init_connection():
     key_dict = json.loads(st.secrets["gcp_service_account"]["info"])
     scopes = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
     creds = Credentials.from_service_account_info(key_dict, scopes=scopes)
     client = gspread.authorize(creds)
+    # 接続確認のために一度シートを開く
     wb = client.open("CoWrite_DB")
     return wb
 
+# データ読み込みは常に最新にするためキャッシュしない
 def load_data():
     wb = init_connection()
     try:
@@ -45,18 +49,28 @@ def load_data():
     return config, song_map, main_data, main_sheet
 
 # ---------------------------
-# 🔔 Discord通知機能
+# 🔔 Discord通知機能 (デバッグ強化版)
 # ---------------------------
 def send_discord_notification(message):
     try:
-        # SecretsからURLを取得
+        # Secretsにキーがあるか確認
+        if "discord_webhook" not in st.secrets:
+            st.error("⚠️ 設定エラー: Secretsに 'discord_webhook' が見つかりません。")
+            return
+
         webhook_url = st.secrets["discord_webhook"]
-        if webhook_url:
-            data = {"content": message}
-            requests.post(webhook_url, json=data)
+        data = {"content": message}
+        
+        # 通知送信
+        response = requests.post(webhook_url, json=data)
+        
+        # 送信失敗したら画面にエラーを出す
+        if response.status_code != 204:
+            st.error(f"⚠️ Discordエラー: 送信できませんでした (Code: {response.status_code})")
+            
     except Exception as e:
-        # 通知エラーでアプリを止めない
-        print(f"Notification Error: {e}")
+        # その他のエラー（ライブラリ不足など）も画面に出す
+        st.error(f"⚠️ システムエラー: 通知機能でエラーが発生しました\n{e}")
 
 # ---------------------------
 # データ取得 & 日付解析
@@ -92,7 +106,7 @@ try:
         DEADLINE_STR = "日付設定エラー"
 
 except Exception as e:
-    st.error("System Error: DB Connection Failed")
+    st.error(f"System Error: DB Connection Failed\n{e}")
     st.stop()
 
 st.set_page_config(page_title=PROJECT_TITLE, page_icon="▪️", layout="centered")
