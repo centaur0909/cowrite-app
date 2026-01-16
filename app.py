@@ -5,13 +5,13 @@ import pytz
 import gspread
 from google.oauth2.service_account import Credentials
 import json
-import re # 正規表現を使うためのライブラリを追加
+import time
 import streamlit.components.v1 as components
 
 # ==========================================
-# 🛠 接続設定
+# 🛠 接続設定 (キャッシュ廃止版)
 # ==========================================
-@st.cache_resource
+# @st.cache_resource ← これを削除しました（常に新品の接続を使う）
 def init_connection():
     key_dict = json.loads(st.secrets["gcp_service_account"]["info"])
     scopes = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
@@ -20,8 +20,7 @@ def init_connection():
     wb = client.open("CoWrite_DB")
     return wb
 
-# キャッシュの有効期限を60秒に設定（DB更新を反映しやすくするため）
-@st.cache_data(ttl=60)
+# @st.cache_data ← これも削除（常に最新のシートを見る）
 def load_data():
     wb = init_connection()
     try:
@@ -60,21 +59,20 @@ try:
     tz = pytz.timezone('Asia/Tokyo')
     now_py = datetime.now(tz)
 
-    # === 🔥 日付解析ロジック (V20.0 Update) ===
-    # どんな形式（/、-、全角、時間なし）でも読み取れるように正規化する
+    # === 🔥 日付解析ロジック ===
     try:
         # 1. 全角数字を半角に、全角スペースを半角に
         clean_str = raw_deadline.translate(str.maketrans({chr(0xFF01 + i): chr(0x21 + i) for i in range(94)}))
         clean_str = clean_str.replace('　', ' ').strip()
         
-        # 2. 区切り文字をハイフンに統一 (2026/01/15 -> 2026-01-15)
+        # 2. 区切り文字をハイフンに統一
         clean_str = clean_str.replace('/', '-')
         
-        # 3. 時間が含まれていない場合（日付だけの場合）、23:59を補完
+        # 3. 時間が含まれていない場合補完
         if ':' not in clean_str:
             clean_str += ' 23:59'
 
-        # 4. パース実行（秒がある場合とない場合の両対応）
+        # 4. パース実行
         try:
             dt_obj = datetime.strptime(clean_str, '%Y-%m-%d %H:%M:%S')
         except ValueError:
@@ -82,13 +80,10 @@ try:
             
         dt_obj = tz.localize(dt_obj)
         DEADLINE_TIMESTAMP = int(dt_obj.timestamp() * 1000)
-        
-        # UI表示用の綺麗な文字列も更新
         DEADLINE_STR = dt_obj.strftime('%Y-%m-%d %H:%M')
 
     except Exception as e:
-        # 万が一解析できない場合はエラーを表示して、とりあえず明日の同時刻にする（0にならないように）
-        st.error(f"⚠️ 日付エラー: DBの日付「{raw_deadline}」を読み取れませんでした。YYYY-MM-DD HH:MM形式で入力してください。")
+        # エラー回避
         fallback_date = now_py.replace(hour=23, minute=59, second=0)
         DEADLINE_TIMESTAMP = int(fallback_date.timestamp() * 1000)
         DEADLINE_STR = "日付設定エラー"
@@ -100,7 +95,7 @@ except Exception as e:
 st.set_page_config(page_title=PROJECT_TITLE, page_icon="▪️", layout="centered")
 
 # ==========================================
-# 🎨 CSS (デザイン維持)
+# 🎨 CSS (V20のデザインを維持)
 # ==========================================
 st.markdown(f"""
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" />
@@ -156,7 +151,7 @@ st.markdown(f"""
 
 st.markdown(f'<div class="custom-title">{PROJECT_TITLE}</div>', unsafe_allow_html=True)
 
-# ⏰ タイマー：V19のJSエンジン（変更なし）
+# ⏰ タイマー
 timer_html_code = f"""
 <!DOCTYPE html>
 <html>
@@ -288,9 +283,8 @@ if not df.empty and "曲名" in df.columns:
                     md_label = f"~~{person} {task_text}~~" if is_done else f"**{person} {task_text}**"
                     new_status = st.checkbox(md_label, value=is_done, key=f"t_{index}")
 
-                    # メタデータ（タスクごとの残り時間アラート）
+                    # メタデータ
                     meta_html = ""
-                    
                     if is_done and "完了日時" in row and str(row["完了日時"]).strip() != "":
                          try:
                             d = datetime.strptime(str(row["完了日時"]), '%Y-%m-%d %H:%M:%S')
@@ -307,7 +301,6 @@ if not df.empty and "曲名" in df.columns:
                     elif not is_done and "期限" in row and str(row["期限"]).strip() != "":
                          limit_str = str(row["期限"])
                          try:
-                             # DBからくる期限も同様にクリーニング
                              clean_limit = limit_str.translate(str.maketrans({chr(0xFF01 + i): chr(0x21 + i) for i in range(94)}))
                              clean_limit = clean_limit.replace('/', '-').strip()
                              if ':' not in clean_limit: clean_limit += ' 23:59'
@@ -356,6 +349,7 @@ if not df.empty and "曲名" in df.columns:
                         st.markdown(meta_html, unsafe_allow_html=True)
 
                     if new_status != is_done:
+                        # ここが修正ポイント：毎回確実に書き込む
                         sheet.update_cell(index + 2, 4, "TRUE" if new_status else "FALSE")
                         if new_status:
                             now_str = datetime.now(tz).strftime('%Y-%m-%d %H:%M:%S')
@@ -377,7 +371,6 @@ if not df.empty and "曲名" in df.columns:
                                 p_val = new_person if new_person != "-" else ""
                                 sheet.append_row([formal_name, new_task, p_val, "FALSE", task_deadline, ""])
                                 st.success("ADDED")
-                                time.sleep(0.5)
                                 st.rerun()
 
                 with st.expander("DELETE"):
