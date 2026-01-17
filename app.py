@@ -41,8 +41,8 @@ def load_data():
                 song_map[item['FormalName']] = item['ShortName']
     except: pass
 
-    # メインタスク（列が増えたので再取得）
-    main_sheet = wb.worksheet("Main") # シート名注意
+    # メインタスク
+    main_sheet = wb.worksheet("Main")
     main_data = main_sheet.get_all_records()
     
     return project_list, song_map, main_data, main_sheet
@@ -91,7 +91,6 @@ try:
                 if diff > -86400: # 過去すぎるものは除外
                     if diff < min_diff:
                         min_diff = diff
-                        # 表示用に「プロジェクト名: 日付」にする
                         target_deadline_str = f"{p_name}: {dt_aware.strftime('%m/%d %H:%M')}"
                         target_timestamp = int(dt_aware.timestamp() * 1000)
             except: continue
@@ -120,10 +119,17 @@ st.markdown(f"""
     .song-header {{ font-family: 'Inter', sans-serif; font-size: 14px; font-weight: 700; color: #999; margin-top: 20px; margin-bottom: 20px; text-transform: uppercase; letter-spacing: 0.05em; }}
     .custom-hr {{ border: 0; height: 1px; background: #333; margin-top: 0px; margin-bottom: 8px; }}
     .task-meta {{ font-family: 'Inter', sans-serif; font-size: 11px !important; margin-left: 28px; margin-bottom: 12px; display: flex; align-items: center; gap: 5px; font-weight: 500; }}
-    .project-tag {{ 
-        font-size: 10px; background: #333; color: #ccc; padding: 2px 6px; border-radius: 4px; 
-        margin-right: 8px; vertical-align: middle; font-weight: normal; letter-spacing: 0;
+    .stats-bar {{
+        display: flex; justify-content: space-between; background: #1E1E1E; border: none; padding: 0; 
+        margin-bottom: 30px; border-radius: 4px; overflow: hidden;
     }}
+    .stats-item {{ 
+        flex: 1; text-align: center; padding: 16px 0; border-right: 1px solid #333;
+        display: flex; flex-direction: column; justify-content: center; align-items: center;
+    }}
+    .stats-item:last-child {{ border-right: none; }}
+    .stats-label {{ font-size: 10px; color: #888; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 6px; line-height: 1; }}
+    .stats-value {{ font-family: 'Roboto Mono', monospace; font-size: 18px; font-weight: 600; color: #F0F0F0; line-height: 1; }}
     div[data-testid="stCheckbox"] label p {{ font-family: 'Inter', sans-serif !important; font-size: 15px !important; font-weight: 500 !important; color: #D0D0D0 !important; }}
     button[data-baseweb="tab"] {{ background-color: transparent !important; color: #666 !important; font-size: 12px !important; font-weight: 600 !important; padding: 8px 16px !important; border-radius: 0px !important; }}
     button[data-baseweb="tab"][aria-selected="true"] {{ color: #FFF !important; border-bottom: 2px solid #FFF !important; }}
@@ -131,10 +137,10 @@ st.markdown(f"""
 </style>
 """, unsafe_allow_html=True)
 
-# ヘッダー（全プロジェクト表示）
+# ヘッダー
 st.markdown(f'<div class="custom-title">{header_title}</div>', unsafe_allow_html=True)
 
-# ⏰ タイマー (DAYS / HOURS 表示に修正)
+# ⏰ タイマー
 components.html(f"""
 <!DOCTYPE html>
 <html>
@@ -171,7 +177,6 @@ components.html(f"""
             const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
             const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
 
-            // 残り1日を切ったら赤くする
             if (days < 1) {{ if (!display.classList.contains("danger-mode")) {{ display.classList.add("danger-mode"); }} }} else {{ display.classList.remove("danger-mode"); }}
             
             display.innerHTML = days + "<span class='unit'>DAYS</span> " + hours + "<span class='unit'>HOURS</span> " + minutes + "<span class='unit'>MIN</span>";
@@ -184,6 +189,29 @@ components.html(f"""
 </html>
 """, height=100)
 
+# --- スタッツ (ここを復活！) ---
+if not df.empty and "完了" in df.columns:
+    total_tasks = len(df)
+    completed_tasks = len(df[df["完了"].astype(str).str.upper() == "TRUE"])
+    rate = int((completed_tasks / total_tasks) * 100) if total_tasks > 0 else 0
+    
+    st.markdown(f"""
+    <div class="stats-bar">
+        <div class="stats-item">
+            <span class="stats-label">TASKS</span>
+            <span class="stats-value">{total_tasks}</span>
+        </div>
+        <div class="stats-item">
+            <span class="stats-label">DONE</span>
+            <span class="stats-value">{completed_tasks}</span>
+        </div>
+        <div class="stats-item">
+            <span class="stats-label">COMPLETED</span>
+            <span class="stats-value">{rate}%</span>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+
 # --- タスクリスト ---
 if not df.empty and "曲名" in df.columns:
     formal_song_names = df["曲名"].unique()
@@ -193,15 +221,13 @@ if not df.empty and "曲名" in df.columns:
         
         for i, formal_name in enumerate(formal_song_names):
             with tabs[i]:
-                # その曲のタスクを抽出
                 song_tasks = df[df["曲名"] == formal_name].sort_values(by="完了", ascending=True)
                 
-                # プロジェクト名を取得（その曲の最初のタスクのプロジェクト名を使う）
+                # プロジェクト名表示
                 current_project_name = ""
                 if not song_tasks.empty and "プロジェクト名" in song_tasks.columns:
                     current_project_name = song_tasks.iloc[0]["プロジェクト名"]
                 
-                # ヘッダーにプロジェクト名を表示
                 header_html = f'<div class="song-header"><span style="color:#FFF; background:#333; padding:2px 8px; border-radius:4px; margin-right:8px;">{current_project_name}</span> {formal_name}</div><hr class="custom-hr">'
                 st.markdown(header_html, unsafe_allow_html=True)
                 
@@ -209,14 +235,10 @@ if not df.empty and "曲名" in df.columns:
                     is_done = str(row["完了"]).upper() == "TRUE"
                     person = f"[{row['担当']}]" if row['担当'] else ""
                     task_text = row['タスク名']
-                    
-                    # プロジェクト名も薄く表示（念のため）
-                    proj_label = ""
-                    
                     md_label = f"~~{person} {task_text}~~" if is_done else f"**{person} {task_text}**"
                     new_status = st.checkbox(md_label, value=is_done, key=f"t_{index}")
 
-                    # メタデータ表示
+                    # メタデータ
                     meta_html = ""
                     if is_done and "完了日時" in row and str(row["完了日時"]).strip() != "":
                          try:
@@ -236,10 +258,8 @@ if not df.empty and "曲名" in df.columns:
                          except: meta_html = f'<div class="task-meta" style="color:#D84315;"><span class="material-symbols-outlined">event</span> DUE {limit_str}</div>'
                     if meta_html: st.markdown(meta_html, unsafe_allow_html=True)
 
-                    # 書き込み処理（列ズレ対応）
                     if new_status != is_done:
-                        # プロジェクト列(1) + 曲名(2) + タスク名(3) + 担当(4) + 完了(5) + 期限(6) + 完了日時(7)
-                        # なので、完了フラグは 5列目、完了日時は 7列目 になります
+                        # 5列目=完了フラグ, 7列目=完了日時
                         sheet.update_cell(index + 2, 5, "TRUE" if new_status else "FALSE")
                         if new_status:
                             now_str = datetime.now(tz).strftime('%Y-%m-%d %H:%M:%S')
@@ -255,23 +275,17 @@ if not df.empty and "曲名" in df.columns:
                 st.write("") 
                 with st.expander("ADD TASK"):
                     with st.form(key=f"add_{i}", clear_on_submit=True):
-                        # プロジェクト選択肢を作成
                         proj_options = [p['ProjectName'] for p in project_list] if project_list else ["-"]
-                        
-                        # 入力フォーム
                         c1, c2 = st.columns(2)
-                        with c1:
-                            target_proj = st.selectbox("PROJECT", proj_options, index=0 if proj_options else 0)
-                        with c2:
-                            new_person = st.selectbox("ASSIGN", ["-", "三好", "梅澤", "2人"])
-
+                        with c1: target_proj = st.selectbox("PROJECT", proj_options)
+                        with c2: new_person = st.selectbox("ASSIGN", ["-", "三好", "梅澤", "2人"])
                         new_task = st.text_input("TASK NAME")
                         task_deadline = st.text_input("DUE DATE (Optional)")
                         
                         if st.form_submit_button("ADD", use_container_width=True):
                             if new_task:
                                 p_val = new_person if new_person != "-" else ""
-                                # A列(Pro), B列(Song), C列(Task), D列(Person), E列(Done), F列(Limit), G列(Date)
+                                # A=Proj, B=Song, C=Task, D=Person, E=Done, F=Limit, G=Date
                                 sheet.append_row([target_proj, formal_name, new_task, p_val, "FALSE", task_deadline, ""])
                                 msg = f"🆕 **[{target_proj}]** 新しいタスクを追加: **{new_task}**\n(Song: {formal_name})"
                                 send_discord_notification(msg)
